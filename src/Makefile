@@ -1,5 +1,5 @@
 OUT = fmod
-OBJECTS = fmod.o
+OBJECTS = fmod.o fat32.o
 SOURCE_DIR = src
 CFLAGS = -Wall -Wextra
 CC = g++
@@ -8,7 +8,7 @@ $(OUT): $(OBJECTS)
 	$(CC) $(CFLAGS) -o $(OUT) $^
 	rm -rf *.o
 
-%.o: %.c
+%.o: %.cpp
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:

@@ -1,7 +1,7 @@
+#include "fat32.h"
 #include "limitsfix.h"
 
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <unistd.h>
@@ -25,23 +25,21 @@ int main( int argc, char * argv[] ) {
 
 	string input, image;
 	Command command;
-	fstream imageFile;
+	FAT_FS::FAT32 fat;
 
 	if ( argc == 2 )
 		image = argv[1];
 
 	else {
 
-		cout << "usage: fmod <FAT Image>\n";
+		cout << "usage: fmod <FAT Image>" << endl;
 		exit( EXIT_SUCCESS );
 	}
 
-	// Open image
-	imageFile.open( image.c_str(), ios::in | ios::out | ios::binary );
+	// Try to load image
+	if ( !fat.init( image ) ) {
 
-	if ( !imageFile.is_open() ) {
-
-		cout << "error: failed to open " << image << endl;
+		cout << "error: failed to open " + image << endl;
 		exit( EXIT_SUCCESS );
 	}
 
@@ -50,89 +48,90 @@ int main( int argc, char * argv[] ) {
 	// Continue prompting until we get EXIT or something happens to our input stream
 	while ( getline( cin, input, '\n' ).good() && ( command = stringToCommand( input ) ) != EXIT ) {
 
+		// Run command
 		switch ( command ) {
 
 			case INVALID: {
 
-				cout << "error: Invalid command, please try again.\n";
+				cout << "error: Invalid command, please try again" << endl;
 				break;
 			}
 
 			case FSINFO: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.fsinfo();
 				break;
 			}
 
 			case OPEN: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.open();
 				break;
 			}
 
 			case CLOSE: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.close();
 				break;
 			}
 
 			case CREATE: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.create();
 				break;
 			}
 
 			case READ: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.read();
 				break;
 			}
 
 			case WRITE: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.write();
 				break;
 			}
 
 			case RM: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.rm();
 				break;
 			}
 
 			case CD: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.cd();
 				break;
 			}
 
 			case LS: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.ls();
 				break;
 			}
 
 			case MKDIR: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.mkdir();
 				break;
 			}
 
 			case RMDIR: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.rmdir();
 				break;
 			}
 
 			case SIZE: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.size();
 				break;
 			}
 
 			case SRM: {
 
-				cout << "error: " << input << " unimplemented\n";
+				fat.srm();
 				break;
 			}
 
@@ -146,16 +145,13 @@ int main( int argc, char * argv[] ) {
 		printPrompt( image );
 	}
 
-	// Cleanup
-	imageFile.close();
-
-	cout << "\nClosing fmod.\n";
+	cout << "\nClosing fmod" << endl;
 	return 0;
 }
 
 /**
  * Primpt Prompt
- * Description: Prints command prompt in form username[fs-image-name]> 
+ * Description: Prints command prompt in form username[fs-image-name]> .
  */
 void printPrompt( const string & image ) {
 
@@ -168,8 +164,8 @@ void printPrompt( const string & image ) {
 
 /**
  * String to Command
- * Description: Converts a string to its Command form
- * Returns: The strings respective Command; otherwise INVALID
+ * Description: Converts a string to its Command form.
+ * Returns: The strings respective Command; otherwise INVALID.
  */
 Command stringToCommand( const string & str  ) {
 
