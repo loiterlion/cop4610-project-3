@@ -1,14 +1,12 @@
 #include "limitsfix.h"
 
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <unistd.h>
 
-using std::cin;
-using std::cout;
-using std::endl;
-using std::string;
+using namespace std;
 
 /**
  * enums
@@ -27,6 +25,7 @@ int main( int argc, char * argv[] ) {
 
 	string input, image;
 	Command command;
+	fstream imageFile;
 
 	if ( argc == 2 )
 		image = argv[1];
@@ -37,9 +36,18 @@ int main( int argc, char * argv[] ) {
 		exit( EXIT_SUCCESS );
 	}
 
+	// Open image
+	imageFile.open( image.c_str(), ios::in | ios::out | ios::binary );
+
+	if ( !imageFile.is_open() ) {
+
+		cout << "error: failed to open " << image << endl;
+		exit( EXIT_SUCCESS );
+	}
 
 	printPrompt( image );
 
+	// Continue prompting until we get EXIT or something happens to our input stream
 	while ( getline( cin, input, '\n' ).good() && ( command = stringToCommand( input ) ) != EXIT ) {
 
 		switch ( command ) {
@@ -52,79 +60,79 @@ int main( int argc, char * argv[] ) {
 
 			case FSINFO: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case OPEN: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case CLOSE: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case CREATE: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case READ: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case WRITE: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case RM: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case CD: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case LS: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case MKDIR: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case RMDIR: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case SIZE: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
 			case SRM: {
 
-				cout << input << " unimplemented\n";
+				cout << "error: " << input << " unimplemented\n";
 				break;
 			}
 
@@ -137,6 +145,9 @@ int main( int argc, char * argv[] ) {
 
 		printPrompt( image );
 	}
+
+	// Cleanup
+	imageFile.close();
 
 	cout << "\nClosing fmod.\n";
 	return 0;
