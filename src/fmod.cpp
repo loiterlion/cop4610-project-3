@@ -25,7 +25,7 @@ int main( int argc, char * argv[] ) {
 
 	string input, image;
 	Command command;
-	FAT_FS::FAT32 fat;
+	fstream fatImage;
 
 	if ( argc == 2 )
 		image = argv[1];
@@ -36,12 +36,17 @@ int main( int argc, char * argv[] ) {
 		exit( EXIT_SUCCESS );
 	}
 
-	// Try to load image
-	if ( !fat.init( image ) ) {
+	fatImage.open( image.c_str(), ios::in | ios::out | ios::binary );
+
+	// Check if we opened file successfully
+	if ( !fatImage.is_open() ) {
 
 		cout << "error: failed to open " + image << endl;
 		exit( EXIT_SUCCESS );
 	}
+
+	// Setup FAT32
+	FAT_FS::FAT32 fat( fatImage );
 
 	printPrompt( image );
 
@@ -144,6 +149,9 @@ int main( int argc, char * argv[] ) {
 
 		printPrompt( image );
 	}
+
+	// Cleanup
+	fatImage.close();
 
 	cout << "\nClosing fmod" << endl;
 	return 0;

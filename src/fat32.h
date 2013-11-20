@@ -23,25 +23,19 @@ class FAT32 {
 
 private:
 
-	bool isInit;
-
 	// BIOS Parameter Block Info
 	unsigned short bytesPerSector, reservedSectorCount;
 	unsigned char sectorsPerCluster, numFats;
 	unsigned int totalSectors, sectorsPerFAT;
 
-	fstream fatImage;
-
-	bool checkInit() const;
+	fstream & fatImage;
 
 	template<class T>
 	void getPrimitive( const streampos & pos, T & out );
 
 public:
 
-	FAT32();
-	~FAT32();
-	bool init( const string & image );
+	FAT32( fstream & fatImage );
 
 	/**
 	 * Commands
