@@ -21,7 +21,7 @@ FAT32::FAT32( fstream & fatImage ) : fatImage( fatImage ) {
 	for ( uint32_t i = 0; i < range; i++ )
 		if ( isFreeCluster( ( entry = getFATEntry( i ) ) ) )
 			this->freeClusters.push_back( i );
-q1
+
 	// Position ourselves in root directory
 	changeDirectory( this->bpb.rootCluster );
 	this->currentDirectory = L"/";
