@@ -24,7 +24,7 @@ FAT32::FAT32( fstream & fatImage ) : fatImage( fatImage ) {
 
 	// Position ourselves in root directory
 	changeDirectory( this->bpb.rootCluster );
-	this->currentDirectory = L"/";
+	this->currentDirectory = "/";
 }
 
 void FAT32::changeDirectory( uint32_t cluster ) {
@@ -56,7 +56,7 @@ void FAT32::changeDirectory( uint32_t cluster ) {
 
 			} else {
 
-				wstring name = L"\0";
+				string name = "";
 				uint8_t attr = attribute & ( ATTR_DIRECTORY | ATTR_VOLUME_ID );
 
 				ShortDirectoryEntry tempShortEntry;
@@ -65,7 +65,7 @@ void FAT32::changeDirectory( uint32_t cluster ) {
 
 				if ( !longEntries.empty() ) {
 
-					name = L"\0";
+					name = "";
 
 					for ( uint32_t i = 0; i < longEntries.size(); i++ ) {
 
@@ -97,9 +97,9 @@ void FAT32::changeDirectory( uint32_t cluster ) {
 	delete[] contents;
 }
 
-void FAT32::appendLongName( wstring & current, uint16_t * name, uint32_t size ) {
+void FAT32::appendLongName( string & current, uint16_t * name, uint32_t size ) {
 
-	wchar_t temp = L'\0';
+	char temp;
 
 	for ( uint32_t i = 0; i < size; i++ ) {
 
@@ -108,15 +108,15 @@ void FAT32::appendLongName( wstring & current, uint16_t * name, uint32_t size ) 
 
 		else {
 
-			memcpy( &temp, name + i, sizeof( uint16_t ) );
+			temp = *(name + i);
 			current += temp;
 		}
 	}
 }
 
-void FAT32::convertShortName( wstring & current, uint8_t * name ) {
+void FAT32::convertShortName( string & current, uint8_t * name ) {
 
-	wchar_t temp = L'\0';
+	char temp;
 	bool trailFound = false;
 	bool connectionComplete = false;
 
@@ -133,10 +133,10 @@ void FAT32::convertShortName( wstring & current, uint8_t * name ) {
 			if ( !connectionComplete && trailFound ) {
 
 				connectionComplete = true;
-				current += L'.';
+				current += '.';
 			}
 
-			memcpy( &temp, name + i, 1 );
+			temp = *(name + i);
 			current += temp;
 		}
 	}
@@ -251,9 +251,6 @@ void FAT32::cd() {
 
 void FAT32::ls( const string & directory ) const {
 
-	if ( !wcout )
-		cout << "WCOUT WENT BAD!" << endl;
-
 	vector<DirectoryEntry> listing;
 
 	if ( !directory.empty() ) {
@@ -265,7 +262,7 @@ void FAT32::ls( const string & directory ) const {
 
 	for ( uint32_t i = 0; i < listing.size(); i++ ) {
 
-		wcout << listing[i].name << " ";
+		cout << listing[i].name << " ";
 	}
 
 	cout << endl;

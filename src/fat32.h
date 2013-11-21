@@ -120,7 +120,7 @@ typedef struct LongDirectoryEntry {
 
 typedef struct DirectoryEntry {
 
-	wstring name;
+	string name;
 	uint8_t  attributes;		
 	uint8_t  NTReserved;		
 	uint8_t  createdTimeTenth;	
@@ -150,7 +150,7 @@ private:
 
 	fstream & fatImage;
 
-	wstring currentDirectory;
+	string currentDirectory;
 
 	vector<uint32_t> freeClusters;
 	vector<DirectoryEntry> currentDirectoryListing;
@@ -160,8 +160,8 @@ private:
 	uint32_t getFATEntry( uint32_t n );
 	void changeDirectory( uint32_t cluster ); 
 	uint8_t * getFileContents( uint32_t initialCluster, uint32_t & size );
-	void appendLongName( wstring & current, uint16_t * name, uint32_t size );
-	void convertShortName( wstring & current, uint8_t * name );
+	void appendLongName( string & current, uint16_t * name, uint32_t size );
+	void convertShortName( string & current, uint8_t * name );
 
 public:
 
