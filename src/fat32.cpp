@@ -69,9 +69,9 @@ void FAT32::changeDirectory( uint32_t cluster ) {
 
 					for ( uint32_t i = 0; i < longEntries.size(); i++ ) {
 
-						appendLongName( name, longEntries[i].name1, 5 );
-						appendLongName( name, longEntries[i].name2, 6 );
-						appendLongName( name, longEntries[i].name3, 2 );
+						appendLongName( name, longEntries[i].name1, sizeof( longEntries[i].name1 ) );
+						appendLongName( name, longEntries[i].name2, sizeof( longEntries[i].name2 ) );
+						appendLongName( name, longEntries[i].name3, sizeof( longEntries[i].name3 ) );
 					}
 
 				}
@@ -123,7 +123,6 @@ void FAT32::convertShortName( wstring & current, uint8_t * name ) {
 
 	for ( uint32_t i = 0; i < 11; i++ ) {
 
-		// TODO: Figure out correct dot locaiton if any
 		if ( name[i] == 0x20 ) {
 
 			trailFound = true;
