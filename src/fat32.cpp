@@ -69,11 +69,10 @@ void FAT32::changeDirectory( uint32_t cluster ) {
 
 					for ( uint32_t i = 0; i < longEntries.size(); i++ ) {
 
-						appendLongName( name, longEntries[i].name1, sizeof( longEntries[i].name1 ) );
-						appendLongName( name, longEntries[i].name2, sizeof( longEntries[i].name2 ) );
-						appendLongName( name, longEntries[i].name3, sizeof( longEntries[i].name3 ) );
+						appendLongName( name, longEntries[i].name1, sizeof( longEntries[i].name1 )/2 );
+						appendLongName( name, longEntries[i].name2, sizeof( longEntries[i].name2 )/2 );
+						appendLongName( name, longEntries[i].name3, sizeof( longEntries[i].name3 )/2 );
 					}
-
 				}
 
 				if ( attr == 0x00 || attr == ATTR_DIRECTORY || attr == ATTR_VOLUME_ID ) {
