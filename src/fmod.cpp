@@ -3,7 +3,6 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <clocale>
 #include <string>
 #include <unistd.h>
 
@@ -23,9 +22,6 @@ void printPrompt( const string & image );
 Command stringToCommand( const string & str  );
 
 int main( int argc, char * argv[] ) {
-
-	// TESTING
-	setlocale(LC_ALL, "");
 
 	string input, image;
 	Command command;

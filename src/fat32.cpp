@@ -21,7 +21,7 @@ FAT32::FAT32( fstream & fatImage ) : fatImage( fatImage ) {
 	for ( uint32_t i = 0; i < range; i++ )
 		if ( isFreeCluster( ( entry = getFATEntry( i ) ) ) )
 			this->freeClusters.push_back( i );
-
+q1
 	// Position ourselves in root directory
 	changeDirectory( this->bpb.rootCluster );
 	this->currentDirectory = L"/";
@@ -123,6 +123,7 @@ void FAT32::convertShortName( wstring & current, uint8_t * name ) {
 
 	for ( uint32_t i = 0; i < 11; i++ ) {
 
+		// TODO: Figure out correct dot locaiton if any
 		if ( name[i] == 0x20 ) {
 
 			trailFound = true;
