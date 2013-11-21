@@ -8,42 +8,38 @@ using namespace FAT_FS;
 FAT32::FAT32( fstream & fatImage ) : fatImage( fatImage ) {
 
 	// Read BIOS Parameter Block
-	this->getPrimitive( BPB_BytsPerSec, this->bytesPerSector );
-	this->getPrimitive( BPB_SecPerClus, this->sectorsPerCluster );
-	this->getPrimitive( BPB_TotSec32, this->totalSectors );
-	this->getPrimitive( BPB_NumFATs, this->numFats );
-	this->getPrimitive( BPB_FATSz32, this->sectorsPerFAT );
-	this->getPrimitive( BPB_RsvdSecCnt, this->reservedSectorCount );
-	this->getPrimitive( BPB_RootClus, this->rootCluster );
+	this->fatImage.seekg( 0 );
+	this->fatImage.read( reinterpret_cast<char *>( &this->bpb ), sizeof( this->bpb ) );
 
-	this->firstDataSector = this->reservedSectorCount + ( this->numFats * this->sectorsPerFAT );
+	this->firstDataSector = this->bpb.reservedSectorCount + ( this->bpb.numFATs * this->bpb.FATSz32 );
 
-	this->fatLocation = this->reservedSectorCount * this->bytesPerSector;
+	this->fatLocation = this->bpb.reservedSectorCount * this->bpb.bytesPerSector;
 
 	// Find free blocks
-	unsigned int entry;
-	unsigned int range = ( this->sectorsPerFAT * this->bytesPerSector ) / FATEntrySize;
-	for ( unsigned int i = 0; i < range; i++ )
+	uint32_t entry;
+	uint32_t range = ( this->bpb.FATSz32 * this->bpb.bytesPerSector ) / FATEntrySize;
+	for ( uint32_t i = 0; i < range; i++ )
 		if ( isFreeCluster( ( entry = getFATEntry( i ) ) ) )
 			this->freeClusters.push_back( i );
 
 	// Position ourselves in root directory
-	changeDirectory( this->rootCluster );
+	changeDirectory( this->bpb.rootCluster );
+	this->currentDirectory = L"/";
 }
 
-void FAT32::changeDirectory( unsigned int cluster ) {
+void FAT32::changeDirectory( uint32_t cluster ) {
 
-	unsigned int size = 0;
-	unsigned char * contents = getFileContents( cluster, size );
+	uint32_t size = 0;
+	uint8_t * contents = getFileContents( cluster, size );
 	deque<LongDirectoryEntry> longEntries;
 
 	// Not concerned with current directory anymore
-	currentDirectory.clear();
+	currentDirectoryListing.clear();
 
-	for ( unsigned int i = 0; i < size; i += 32 ) {
+	for ( uint32_t i = 0; i < size; i += 32 ) {
 
-		unsigned char ordinal = contents[i];
-		unsigned char attribute =  contents[i+11];
+		uint8_t ordinal = contents[i];
+		uint8_t attribute =  contents[i+11];
 
 		// Check if not free entry
 		if ( ordinal != 0xE5 ) {
@@ -55,23 +51,23 @@ void FAT32::changeDirectory( unsigned int cluster ) {
 			if ( ( attribute & ATTR_LONG_NAME_MASK ) == ATTR_LONG_NAME ) {
 
 				LongDirectoryEntry tempLongEntry;
-				copy( tempLongEntry, contents+i );
+				memcpy( &tempLongEntry, contents+i, sizeof( LongDirectoryEntry ) );
 				longEntries.push_front( tempLongEntry );
 
 			} else {
 
 				wstring name = L"\0";
-				unsigned char attr = attribute & ( ATTR_DIRECTORY | ATTR_VOLUME_ID );
+				uint8_t attr = attribute & ( ATTR_DIRECTORY | ATTR_VOLUME_ID );
 
-				ShortDirectoryEntry shortEntry;
-				copy( shortEntry, contents+i );
-				convertShortName( name, shortEntry.name );
+				ShortDirectoryEntry tempShortEntry;
+				memcpy( &tempShortEntry, contents+i, sizeof( ShortDirectoryEntry ) );
+				convertShortName( name, tempShortEntry.name );
 
 				if ( !longEntries.empty() ) {
 
 					name = L"\0";
 
-					for ( unsigned int i = 0; i < longEntries.size(); i++ ) {
+					for ( uint32_t i = 0; i < longEntries.size(); i++ ) {
 
 						appendLongName( name, longEntries[i].name1, 5 );
 						appendLongName( name, longEntries[i].name2, 6 );
@@ -82,7 +78,12 @@ void FAT32::changeDirectory( unsigned int cluster ) {
 
 				if ( attr == 0x00 || attr == ATTR_DIRECTORY || attr == ATTR_VOLUME_ID ) {
 
-					currentDirectory.push_back( DirectoryEntry( name, shortEntry ) );
+					// Add new DirectoryEntry
+					DirectoryEntry tempDirectoryEntry;
+					tempDirectoryEntry.name = name;
+					memcpy( &tempDirectoryEntry + sizeof( tempDirectoryEntry.name ),
+						&tempShortEntry + sizeof( tempShortEntry.name ), sizeof( ShortDirectoryEntry ) );
+					currentDirectoryListing.push_back( tempDirectoryEntry );
 
 				} else {
 
@@ -97,30 +98,30 @@ void FAT32::changeDirectory( unsigned int cluster ) {
 	delete[] contents;
 }
 
-void FAT32::appendLongName( wstring & current, unsigned short * name, unsigned int size ) {
+void FAT32::appendLongName( wstring & current, uint16_t * name, uint32_t size ) {
 
 	wchar_t temp = L'\0';
 
-	for ( unsigned int i = 0; i < size; i++ ) {
+	for ( uint32_t i = 0; i < size; i++ ) {
 
 		if ( name[i] == 0xFFFF || name[i] == 0x0000 )
 			break;
 
 		else {
 
-			memcpy( &temp, name + i, sizeof( unsigned short ) );
+			memcpy( &temp, name + i, sizeof( uint16_t ) );
 			current += temp;
 		}
 	}
 }
 
-void FAT32::convertShortName( wstring & current, unsigned char * name ) {
+void FAT32::convertShortName( wstring & current, uint8_t * name ) {
 
 	wchar_t temp = L'\0';
 	bool trailFound = false;
 	bool connectionComplete = false;
 
-	for ( unsigned int i = 0; i < 11; i++ ) {
+	for ( uint32_t i = 0; i < 11; i++ ) {
 
 		if ( name[i] == 0x20 ) {
 
@@ -142,39 +143,11 @@ void FAT32::convertShortName( wstring & current, unsigned char * name ) {
 	}
 }
 
-void FAT32::copy( LongDirectoryEntry & longEntry, unsigned char * buffer ) {
+uint8_t * FAT32::getFileContents( uint32_t initialCluster, uint32_t & size ) {
 
-	memcpy( &longEntry.ordinal, buffer + LDIR_Ord, sizeof( longEntry.ordinal ) );  		
-	memcpy( &longEntry.name1, buffer + LDIR_Name1, sizeof( longEntry.name1 ) );		
-	memcpy( &longEntry.attributes, buffer + LDIR_Attr, sizeof( longEntry.attributes ) );		
-	memcpy( &longEntry.type, buffer + LDIR_Type, sizeof( longEntry.type ) );				
-	memcpy( &longEntry.checksum, buffer + LDIR_Chksum, sizeof( longEntry.checksum ) );			
-	memcpy( &longEntry.name2, buffer + LDIR_Name2, sizeof( longEntry.name2 ) );		
-	memcpy( &longEntry.firstClusterLO, buffer + LDIR_FstClusLO, sizeof( longEntry.firstClusterLO ) );	
-	memcpy( &longEntry.name3, buffer + LDIR_Name3, sizeof( longEntry.name3 ) );		
-}
+	vector<uint32_t> clusterChain;
 
-void FAT32::copy( ShortDirectoryEntry & shortEntry, unsigned char * buffer ) {
-
-	memcpy( &shortEntry.name, buffer + DIR_Name, sizeof( shortEntry.name ) );			
-	memcpy( &shortEntry.attributes, buffer + DIR_Attr, sizeof( shortEntry.attributes ) );	
-	memcpy( &shortEntry.NTReserved, buffer + DIR_NTRes, sizeof( shortEntry.NTReserved ) );	
-	memcpy( &shortEntry.createdTimeTenth, buffer + DIR_CrtTimeTenth, sizeof( shortEntry.createdTimeTenth ) );
-	memcpy( &shortEntry.createdTime, buffer + DIR_CrtTime, sizeof( shortEntry.createdTime ) );	
-	memcpy( &shortEntry.createdDate, buffer + DIR_CrtDate, sizeof( shortEntry.createdDate ) );	
-	memcpy( &shortEntry.lastAccessDate, buffer + DIR_LstAccDate, sizeof( shortEntry.lastAccessDate ) );
-	memcpy( &shortEntry.firstClusterHI, buffer + DIR_FstClusHI, sizeof( shortEntry.firstClusterHI ) );
-	memcpy( &shortEntry.writeTime, buffer + DIR_WrtTime, sizeof( shortEntry.writeTime ) );	
-	memcpy( &shortEntry.writeDate, buffer + DIR_WrtDate, sizeof( shortEntry.writeDate ) );	
-	memcpy( &shortEntry.firstClusterLO, buffer + DIR_FstClusLO, sizeof( shortEntry.firstClusterLO ) );
-	memcpy( &shortEntry.fileSize, buffer + DIR_FileSize, sizeof( shortEntry.fileSize ) );			
-}
-
-unsigned char * FAT32::getFileContents( unsigned int initialCluster, unsigned int & size ) {
-
-	vector<unsigned int> clusterChain;
-
-	unsigned int nextCluster = initialCluster;
+	uint32_t nextCluster = initialCluster;
 
 	// Build list of clusters for this file
 	do {
@@ -183,51 +156,38 @@ unsigned char * FAT32::getFileContents( unsigned int initialCluster, unsigned in
 
 	} while ( ( nextCluster = getFATEntry( nextCluster ) ) < EOCMarker  );
 
-	size = clusterChain.size() * ( this->sectorsPerCluster * this->bytesPerSector );
-	unsigned char * data = new unsigned char[ size ];
-	unsigned char * temp = data;
+	size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
+	uint8_t * data = new uint8_t[ size ];
+	uint8_t * temp = data;
 
-	for ( unsigned int i = 0; i < clusterChain.size(); i++ ) {
+	for ( uint32_t i = 0; i < clusterChain.size(); i++ ) {
 
-		this->fatImage.seekg( this->getFirstSectorOfCluster( clusterChain[i] ) * this->bytesPerSector );
+		this->fatImage.seekg( this->getFirstSectorOfCluster( clusterChain[i] ) * this->bpb.bytesPerSector  );
 
-		for ( unsigned int j = 0; j < this->sectorsPerCluster; j++ ) {
+		for ( uint32_t j = 0; j < this->bpb.sectorsPerCluster ; j++ ) {
 
-			this->fatImage.read( reinterpret_cast<char *>( temp ), this->bytesPerSector );
-			temp += this->bytesPerSector;
+			this->fatImage.read( reinterpret_cast<char *>( temp ), this->bpb.bytesPerSector  );
+			temp += this->bpb.bytesPerSector ;
 		}
 	}
 
 	return data;
 }
 
-/**
- * Get Primitive
- * Description: Gets a primitive from the image in its Big Endian form.
- *				Little Endian to Big Endian conversion is implicity done
- *				by reading forward in the file reversing the bytes.
- */
-template<class T>
-void FAT32::getPrimitive( const streampos & pos, T & out ) {
+uint32_t FAT32::getFirstSectorOfCluster( uint32_t n ) {
 
-	this->fatImage.seekg( pos );
-	this->fatImage.read( reinterpret_cast<char *>( &out ), sizeof( T ) );
-}
-
-unsigned int FAT32::getFirstSectorOfCluster( unsigned int n ) {
-
-	return ( ( n - 2 ) * this->sectorsPerCluster ) + this->
+	return ( ( n - 2 ) * this->bpb.sectorsPerCluster ) + this->
 	firstDataSector;
 }
 
-bool FAT32::isFreeCluster( unsigned int entry ) {
+bool FAT32::isFreeCluster( uint32_t entry ) {
 
 	return ( entry == FreeCluster );
 }
 
-unsigned int FAT32::getFATEntry( unsigned int n ) {
+uint32_t FAT32::getFATEntry( uint32_t n ) {
 
-	unsigned int result = 0;
+	uint32_t result = 0;
 
 	this->fatImage.seekg( this->fatLocation + ( n * FATEntrySize ) );
 	this->fatImage.read( reinterpret_cast<char *>( &result ), FATEntrySize );
@@ -246,12 +206,12 @@ unsigned int FAT32::getFATEntry( unsigned int n ) {
 void FAT32::fsinfo() const {
 
 	// + used to promote type to a printable number
-	cout << "Bytes per sector: " << this->bytesPerSector
-		 << "\nSectors per cluster: " << +this->sectorsPerCluster
-		 << "\nTotal sectors: " << this->totalSectors
-		 << "\nNumber of FATs: " << +this->numFats
-		 << "\nSectors per FAT: " << this->sectorsPerFAT
-		 << "\nNumber of free sectors: " << this->freeClusters.size() * this->sectorsPerCluster
+	cout << "Bytes per sector: " << this->bpb.bytesPerSector
+		 << "\nSectors per cluster: " << +this->bpb.sectorsPerCluster
+		 << "\nTotal sectors: " << this->bpb.totalSectors32
+		 << "\nNumber of FATs: " << +this->bpb.numFATs
+		 << "\nSectors per FAT: " << this->bpb.FATSz32
+		 << "\nNumber of free sectors: " << this->freeClusters.size() * this->bpb.sectorsPerCluster
 		 << endl;
 }
 
@@ -292,34 +252,24 @@ void FAT32::cd() {
 
 void FAT32::ls( const string & directory ) const {
 
+	if ( !wcout )
+		cout << "WCOUT WENT BAD!" << endl;
+
 	vector<DirectoryEntry> listing;
 
 	if ( !directory.empty() ) {
 
 	} else {
 
-		listing = currentDirectory;
+		listing = currentDirectoryListing;
 	}
 
-	for ( unsigned int i = 0; i < listing.size(); i++ ) {
+	for ( uint32_t i = 0; i < listing.size(); i++ ) {
 
-		unsigned char attr = listing[i].attributes & ( ATTR_DIRECTORY | ATTR_VOLUME_ID );
-
-		if ( attr == 0x00 ) {
-
-			wcout << "Found file: " << listing[i].name << endl;
-		}
-		else if ( attr == ATTR_DIRECTORY ) {
-
-			wcout << "Found directory: " << listing[i].name << endl;
-		}
-		else if ( attr == ATTR_VOLUME_ID ) {
-
-			wcout << "Found volume label: " << listing[i].name << endl;
-		}
+		wcout << listing[i].name << " ";
 	}
-	
-	cout << "error: unimplmented" << endl;
+
+	cout << endl;
 }
 
 void FAT32::mkdir() {

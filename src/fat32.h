@@ -1,11 +1,12 @@
 #pragma once
 
+#include <cstdint>
+#include <cwchar>
 #include <deque>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <vector>
-#include <cwchar>
 
 using namespace std;
 
@@ -20,7 +21,7 @@ const streampos BPB_BytsPerSec = 0xB,
 				BPB_FATSz32 = 0x24,
 				BPB_RootClus = 0x2C;
 
-const unsigned char ATTR_READ_ONLY = 0x01,
+const uint8_t ATTR_READ_ONLY = 0x01,
 					ATTR_HIDDEN = 0x02,
 					ATTR_SYSTEM = 0x04,
 					ATTR_VOLUME_ID = 0x08,
@@ -30,7 +31,7 @@ const unsigned char ATTR_READ_ONLY = 0x01,
 					ATTR_LONG_NAME_MASK = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID | ATTR_DIRECTORY | ATTR_ARCHIVE,
 					LAST_LONG_ENTRY = 0x40;
 
-const unsigned int FATEntrySize = 0x4,
+const uint32_t FATEntrySize = 0x4,
 				   FATEntryMask = 0x0FFFFFFF,
 				   FreeCluster = 0x00000000,
 				   EOCMarker = 0x0FFFFFF8,
@@ -55,66 +56,84 @@ const unsigned int FATEntrySize = 0x4,
 				   LDIR_FstClusLO = 0x1A,
 				   LDIR_Name3 = 0x1C;
 
+typedef struct BIOSParameterBlock {
+
+	uint8_t jmpBoot[3];
+	uint8_t OEMName[8];
+	uint16_t bytesPerSector;
+	uint8_t sectorsPerCluster;
+	uint16_t reservedSectorCount;
+	uint8_t numFATs;
+	uint16_t rootEntryCount;
+	uint16_t totalSectors16;
+	uint8_t media;
+	uint16_t FATSz16;
+	uint16_t sectorsPerTrack;
+	uint16_t numHeads;
+	uint32_t hiddenSectors;
+	uint32_t totalSectors32;
+	uint32_t FATSz32;
+	uint16_t extraFlags;
+	uint16_t FSVersion;
+	uint32_t rootCluster;
+	uint16_t FSInfo;
+	uint16_t backupBootSector;
+	uint8_t reserved[12];
+	uint8_t driveNumber;
+	uint8_t reserved1;
+	uint8_t bootSignature;
+	uint32_t volumeID;
+	uint8_t volumeLabel[11];
+	uint8_t fileSystemType[8];
+
+} __attribute__((packed)) BIOSParameterBlock;
+
 typedef struct ShortDirectoryEntry {
 
-	unsigned char name[11];			
-	unsigned char attributes;		
-	unsigned char NTReserved;		
-	unsigned char createdTimeTenth;	
-	unsigned short createdTime;		
-	unsigned short createdDate;		
-	unsigned short lastAccessDate;	
-	unsigned short firstClusterHI;	
-	unsigned short writeTime;		
-	unsigned short writeDate;		
-	unsigned short firstClusterLO;	
-	unsigned int fileSize;			
-} ShortDirectoryEntry;
+	uint8_t name[11];			
+	uint8_t attributes;		
+	uint8_t NTReserved;		
+	uint8_t createdTimeTenth;	
+	uint16_t createdTime;		
+	uint16_t createdDate;		
+	uint16_t lastAccessDate;	
+	uint16_t firstClusterHI;	
+	uint16_t writeTime;		
+	uint16_t writeDate;		
+	uint16_t firstClusterLO;	
+	uint32_t fileSize;	
+
+} __attribute__((packed)) ShortDirectoryEntry;
 
 typedef struct LongDirectoryEntry {
 
-	unsigned char ordinal;  		
-	unsigned short name1[5];		
-	unsigned char attributes;		
-	unsigned char type;				
-	unsigned char checksum;			
-	unsigned short name2[6];		
-	unsigned short firstClusterLO;	
-	unsigned short name3[2];		
+	uint8_t ordinal;  		
+	uint16_t name1[5];		
+	uint8_t attributes;		
+	uint8_t type;				
+	uint8_t checksum;			
+	uint16_t name2[6];		
+	uint16_t firstClusterLO;	
+	uint16_t name3[2];		
 
-} LongDirectoryEntry;
+} __attribute__((packed)) LongDirectoryEntry;
 
 typedef struct DirectoryEntry {
 
-	DirectoryEntry( const wstring & name, const ShortDirectoryEntry & shortEntry ) {
-
-		this->name = name;
-		this->attributes = shortEntry.attributes;		
-		this->NTReserved = shortEntry.NTReserved;			
-		this->createdTimeTenth = shortEntry.createdTimeTenth;		
-		this->createdTime = shortEntry.createdTime;			
-		this->createdDate = shortEntry.createdDate;			
-		this->lastAccessDate = shortEntry.lastAccessDate;		
-		this->firstClusterHI = shortEntry.firstClusterHI;		
-		this->writeTime = shortEntry.writeTime;			
-		this->writeDate = shortEntry.writeDate;			
-		this->firstClusterLO = shortEntry.firstClusterLO;		
-		this->fileSize = shortEntry.fileSize;	
-	}
-
 	wstring name;
-	unsigned char attributes;		
-	unsigned char NTReserved;		
-	unsigned char createdTimeTenth;	
-	unsigned short createdTime;		
-	unsigned short createdDate;		
-	unsigned short lastAccessDate;	
-	unsigned short firstClusterHI;	
-	unsigned short writeTime;		
-	unsigned short writeDate;		
-	unsigned short firstClusterLO;	
-	unsigned int fileSize;
-} DirectoryEntry;
+	uint8_t  attributes;		
+	uint8_t  NTReserved;		
+	uint8_t  createdTimeTenth;	
+	uint16_t createdTime;		
+	uint16_t createdDate;		
+	uint16_t lastAccessDate;	
+	uint16_t firstClusterHI;	
+	uint16_t writeTime;		
+	uint16_t writeDate;		
+	uint16_t firstClusterLO;	
+	uint32_t  fileSize;
+
+} __attribute__((packed)) DirectoryEntry;
 
 /**
  * FAT File System
@@ -125,34 +144,24 @@ class FAT32 {
 private:
 
 	// BIOS Parameter Block Info
-	unsigned short bytesPerSector,
-				   reservedSectorCount;
+	BIOSParameterBlock bpb;
 
-	unsigned char sectorsPerCluster,
-				  numFats;
-
-	unsigned int totalSectors, 
-				 sectorsPerFAT, 
-				 rootCluster,
-				 firstDataSector,
-				 fatLocation;
+	uint32_t firstDataSector, fatLocation;
 
 	fstream & fatImage;
 
-	vector<unsigned int> freeClusters;
-	vector<DirectoryEntry> currentDirectory;
+	wstring currentDirectory;
 
-	template<class T>
-	void getPrimitive( const streampos & pos, T & out );
-	unsigned int getFirstSectorOfCluster( unsigned int n );
-	bool isFreeCluster( unsigned int entry );
-	unsigned int getFATEntry( unsigned int n );
-	void changeDirectory( unsigned int cluster ); 
-	unsigned char * getFileContents( unsigned int initialCluster, unsigned int & size );
-	void copy( LongDirectoryEntry & longEntry, unsigned char * buffer );
-	void copy( ShortDirectoryEntry & shortEntry, unsigned char * buffer ); 
-	void appendLongName( wstring & current, unsigned short * name, unsigned int size );
-	void convertShortName( wstring & current, unsigned char * name );
+	vector<uint32_t> freeClusters;
+	vector<DirectoryEntry> currentDirectoryListing;
+	
+	uint32_t getFirstSectorOfCluster( uint32_t n );
+	bool isFreeCluster( uint32_t entry );
+	uint32_t getFATEntry( uint32_t n );
+	void changeDirectory( uint32_t cluster ); 
+	uint8_t * getFileContents( uint32_t initialCluster, uint32_t & size );
+	void appendLongName( wstring & current, uint16_t * name, uint32_t size );
+	void convertShortName( wstring & current, uint8_t * name );
 
 public:
 
