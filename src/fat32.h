@@ -121,17 +121,7 @@ typedef struct LongDirectoryEntry {
 typedef struct DirectoryEntry {
 
 	string name;
-	uint8_t  attributes;		
-	uint8_t  NTReserved;		
-	uint8_t  createdTimeTenth;	
-	uint16_t createdTime;		
-	uint16_t createdDate;		
-	uint16_t lastAccessDate;	
-	uint16_t firstClusterHI;	
-	uint16_t writeTime;		
-	uint16_t writeDate;		
-	uint16_t firstClusterLO;	
-	uint32_t  fileSize;
+	ShortDirectoryEntry shortEntry;
 
 } __attribute__((packed)) DirectoryEntry;
 
@@ -149,23 +139,30 @@ private:
 	uint32_t firstDataSector, fatLocation;
 
 	fstream & fatImage;
+	uint32_t * fat;
 
-	string currentDirectory;
+	vector<string> currentPath;
 
 	vector<uint32_t> freeClusters;
 	vector<DirectoryEntry> currentDirectoryListing;
 	
-	uint32_t getFirstSectorOfCluster( uint32_t n );
-	bool isFreeCluster( uint32_t entry );
-	uint32_t getFATEntry( uint32_t n );
-	void changeDirectory( uint32_t cluster ); 
-	uint8_t * getFileContents( uint32_t initialCluster, uint32_t & size );
-	void appendLongName( string & current, uint16_t * name, uint32_t size );
-	void convertShortName( string & current, uint8_t * name );
+	void convertShortName( string & current, uint8_t * name ) const;
+	void appendLongName( string & current, uint16_t * name, uint32_t size ) const;
+	int32_t findDirectory( const string & directory, uint32_t & index ) const;
+	inline uint32_t formCluster( const ShortDirectoryEntry & entry ) const;
+	vector<DirectoryEntry> getDirectoryListing( uint32_t cluster ) const;
+	inline uint32_t getFATEntry( uint32_t n ) const;
+	uint8_t * getFileContents( uint32_t initialCluster, uint32_t & size ) const;
+	uint32_t getFirstSectorOfCluster( uint32_t n ) const;
+	inline bool isDirectory( const DirectoryEntry & entry ) const;
+	bool isFreeCluster( uint32_t entry ) const;
 
 public:
 
 	FAT32( fstream & fatImage );
+	~FAT32();
+
+	const vector<string> & getCurrentPath() const;
 
 	/**
 	 * Commands
@@ -178,7 +175,7 @@ public:
 	void read();
 	void write();
 	void rm();
-	void cd();
+	void cd( const string & directory );
 	void ls( const string & directory ) const;
 	void mkdir();
 	void rmdir();

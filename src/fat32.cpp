@@ -15,26 +15,39 @@ FAT32::FAT32( fstream & fatImage ) : fatImage( fatImage ) {
 
 	this->fatLocation = this->bpb.reservedSectorCount * this->bpb.bytesPerSector;
 
+	// Read in fat
+	uint32_t fatEntries = ( this->bpb.FATSz32 * this->bpb.bytesPerSector ) / FATEntrySize;
+	this->fat = new uint32_t[fatEntries];
+	this->fatImage.seekg( this->fatLocation );
+	this->fatImage.read( reinterpret_cast<char *>( this->fat ), this->bpb.FATSz32 * this->bpb.bytesPerSector );
+
 	// Find free blocks
 	uint32_t entry;
-	uint32_t range = ( this->bpb.FATSz32 * this->bpb.bytesPerSector ) / FATEntrySize;
-	for ( uint32_t i = 0; i < range; i++ )
+	for ( uint32_t i = 0; i < fatEntries; i++ )
 		if ( isFreeCluster( ( entry = getFATEntry( i ) ) ) )
 			this->freeClusters.push_back( i );
 
 	// Position ourselves in root directory
-	changeDirectory( this->bpb.rootCluster );
-	this->currentDirectory = "/";
+	this->currentDirectoryListing = getDirectoryListing( this->bpb.rootCluster );
 }
 
-void FAT32::changeDirectory( uint32_t cluster ) {
+FAT32::~FAT32() {
+
+	// Cleanup
+	delete[] this->fat;
+}
+
+const vector<string> & FAT32::getCurrentPath() const {
+
+	return this->currentPath;
+}
+
+vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
 
 	uint32_t size = 0;
 	uint8_t * contents = getFileContents( cluster, size );
 	deque<LongDirectoryEntry> longEntries;
-
-	// Not concerned with current directory anymore
-	currentDirectoryListing.clear();
+	vector<DirectoryEntry> result;
 
 	for ( uint32_t i = 0; i < size; i += 32 ) {
 
@@ -80,9 +93,8 @@ void FAT32::changeDirectory( uint32_t cluster ) {
 					// Add new DirectoryEntry
 					DirectoryEntry tempDirectoryEntry;
 					tempDirectoryEntry.name = name;
-					memcpy( &tempDirectoryEntry + sizeof( tempDirectoryEntry.name ),
-						&tempShortEntry + sizeof( tempShortEntry.name ), sizeof( ShortDirectoryEntry ) );
-					currentDirectoryListing.push_back( tempDirectoryEntry );
+					tempDirectoryEntry.shortEntry = tempShortEntry;
+					result.push_back( tempDirectoryEntry );
 
 				} else {
 
@@ -95,9 +107,11 @@ void FAT32::changeDirectory( uint32_t cluster ) {
 	}
 
 	delete[] contents;
+
+	return result;
 }
 
-void FAT32::appendLongName( string & current, uint16_t * name, uint32_t size ) {
+void FAT32::appendLongName( string & current, uint16_t * name, uint32_t size ) const {
 
 	char temp;
 
@@ -114,7 +128,7 @@ void FAT32::appendLongName( string & current, uint16_t * name, uint32_t size ) {
 	}
 }
 
-void FAT32::convertShortName( string & current, uint8_t * name ) {
+void FAT32::convertShortName( string & current, uint8_t * name ) const {
 
 	char temp;
 	bool trailFound = false;
@@ -142,7 +156,7 @@ void FAT32::convertShortName( string & current, uint8_t * name ) {
 	}
 }
 
-uint8_t * FAT32::getFileContents( uint32_t initialCluster, uint32_t & size ) {
+uint8_t * FAT32::getFileContents( uint32_t initialCluster, uint32_t & size ) const {
 
 	vector<uint32_t> clusterChain;
 
@@ -173,25 +187,56 @@ uint8_t * FAT32::getFileContents( uint32_t initialCluster, uint32_t & size ) {
 	return data;
 }
 
-uint32_t FAT32::getFirstSectorOfCluster( uint32_t n ) {
+uint32_t FAT32::getFirstSectorOfCluster( uint32_t n ) const {
 
 	return ( ( n - 2 ) * this->bpb.sectorsPerCluster ) + this->
 	firstDataSector;
 }
 
-bool FAT32::isFreeCluster( uint32_t entry ) {
+bool FAT32::isFreeCluster( uint32_t entry ) const {
 
 	return ( entry == FreeCluster );
 }
 
-uint32_t FAT32::getFATEntry( uint32_t n ) {
+inline uint32_t FAT32::getFATEntry( uint32_t n ) const {
+
+	return this->fat[n] & FATEntryMask;
+}
+
+inline bool FAT32::isDirectory( const DirectoryEntry & entry ) const {
+
+	return ( entry.shortEntry.attributes & ( ATTR_DIRECTORY | ATTR_VOLUME_ID ) ) == ATTR_DIRECTORY;
+}
+
+inline uint32_t FAT32::formCluster( const ShortDirectoryEntry & entry ) const {
 
 	uint32_t result = 0;
+	result |= entry.firstClusterLO;
+	result |= entry.firstClusterHI << 16;
 
-	this->fatImage.seekg( this->fatLocation + ( n * FATEntrySize ) );
-	this->fatImage.read( reinterpret_cast<char *>( &result ), FATEntrySize );
+	return result;
+}
 
-	return result & FATEntryMask;
+int32_t FAT32::findDirectory( const string & directory, uint32_t & index ) const {
+
+	// Check if directory user want is in current directory
+	for ( uint32_t i = 0; i < currentDirectoryListing.size(); i++ )
+		if ( currentDirectoryListing[i].name.compare( directory ) == 0 ) {
+
+			if ( isDirectory( currentDirectoryListing[i] ) )  {
+
+				index = i;
+				return 0;
+			}
+
+			else 
+				// File not directory
+				return -2;
+			
+		}
+
+	// Directory not found
+	return -1;
 }
 
 /**
@@ -244,20 +289,62 @@ void FAT32::rm() {
 	cout << "error: unimplmented" << endl;
 }
 
-void FAT32::cd() {
+void FAT32::cd( const string & directory ) {
 
-	cout << "error: unimplmented" << endl;
+	uint32_t index;
+	int32_t result;
+	result = findDirectory( directory, index );
+
+	if ( result == 0 ) {
+
+		if ( directory.compare( ".." ) == 0 && formCluster( currentDirectoryListing[index].shortEntry ) == 0 ) {
+
+			this->currentPath.clear();
+			this->currentDirectoryListing = getDirectoryListing( this->bpb.rootCluster );
+
+		} else {
+
+			if ( directory.compare( ".." ) == 0 )
+				this->currentPath.pop_back();
+
+			else if ( directory.compare( "." ) != 0 )
+				this->currentPath.push_back( directory );
+
+			this->currentDirectoryListing = getDirectoryListing( formCluster( currentDirectoryListing[index].shortEntry ) );
+		}		
+	}
+
+	else if ( result == -1 )
+		cout << "error: cd: " << directory << " not found" << endl;
+
+	else if ( result == -2 )
+		cout << "error: cd: " << directory << " is not a directory" << endl;
 }
 
 void FAT32::ls( const string & directory ) const {
 
-	vector<DirectoryEntry> listing;
+	vector<DirectoryEntry> listing = currentDirectoryListing;
 
 	if ( !directory.empty() ) {
 
-	} else {
+		uint32_t index;
+		int32_t result;
+		result = findDirectory( directory, index );
 
-		listing = currentDirectoryListing;
+		if ( result == 0 )
+			listing = getDirectoryListing( formCluster( currentDirectoryListing[index].shortEntry ) );
+
+		else if ( result == -1 ) {
+
+			cout << "error: ls: " << directory << " not found" << endl;
+			return;
+		}
+
+		else if ( result == -2 ) {
+
+			cout << "error: ls: " << directory << " is not a directory" << endl;
+			return;
+		}
 	}
 
 	for ( uint32_t i = 0; i < listing.size(); i++ ) {

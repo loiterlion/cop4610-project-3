@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <unistd.h>
 
@@ -18,7 +19,8 @@ enum Command { INVALID, FSINFO, OPEN, CLOSE, CREATE, READ, WRITE, RM, CD, LS, MK
  * Forward Declarations
  */
 
-void printPrompt( const string & image );
+vector<string> tokenize( const string & input );
+void printPrompt( const vector<string> & currentPath );
 Command stringToCommand( const string & str  );
 
 int main( int argc, char * argv[] ) {
@@ -48,106 +50,147 @@ int main( int argc, char * argv[] ) {
 	// Setup FAT32
 	FAT_FS::FAT32 fat( fatImage );
 
-	printPrompt( image );
+	printPrompt( fat.getCurrentPath() );
+
+	// Get input for first time
+	getline( cin, input, '\n' );
+	vector<string> tokens = tokenize( input );
 
 	// Continue prompting until we get EXIT or something happens to our input stream
-	while ( getline( cin, input, '\n' ).good() && ( command = stringToCommand( input ) ) != EXIT ) {
+	while ( cin.good() ) {
 
-		// Run command
-		switch ( command ) {
+		if ( !tokens.empty() ) {
 
-			case INVALID: {
-
-				cout << "error: Invalid command, please try again" << endl;
+			if ( ( command = stringToCommand( tokens[0] ) ) == EXIT )
 				break;
-			}
 
-			case FSINFO: {
+			else {
 
-				fat.fsinfo();
-				break;
-			}
+				// Run command
+				switch ( command ) {
 
-			case OPEN: {
+					case INVALID: {
 
-				fat.open();
-				break;
-			}
+						cout << "error: Invalid command, please try again" << endl;
+						break;
+					}
 
-			case CLOSE: {
+					case FSINFO: {
 
-				fat.close();
-				break;
-			}
+						fat.fsinfo();
+						break;
+					}
 
-			case CREATE: {
+					case OPEN: {
 
-				fat.create();
-				break;
-			}
+						fat.open();
+						break;
+					}
 
-			case READ: {
+					case CLOSE: {
 
-				fat.read();
-				break;
-			}
+						fat.close();
+						break;
+					}
 
-			case WRITE: {
+					case CREATE: {
 
-				fat.write();
-				break;
-			}
+						fat.create();
+						break;
+					}
 
-			case RM: {
+					case READ: {
 
-				fat.rm();
-				break;
-			}
+						fat.read();
+						break;
+					}
 
-			case CD: {
+					case WRITE: {
 
-				fat.cd();
-				break;
-			}
+						fat.write();
+						break;
+					}
 
-			case LS: {
+					case RM: {
 
-				fat.ls( "" );
-				break;
-			}
+						fat.rm();
+						break;
+					}
 
-			case MKDIR: {
+					case CD: {
 
-				fat.mkdir();
-				break;
-			}
+						if ( tokens.size() == 2 ) {
 
-			case RMDIR: {
+							if ( tokens[1].find( "/" ) == string::npos )
+								fat.cd( tokens[1] );
 
-				fat.rmdir();
-				break;
-			}
+							else
+								cout << "error: directory name may not contain /" << endl;
+						} 
 
-			case SIZE: {
+						else
+							cout << "error: usage: cd [dir_name]" << endl;
 
-				fat.size();
-				break;
-			}
+						break;
+					}
 
-			case SRM: {
+					case LS: {
 
-				fat.srm();
-				break;
-			}
+						if ( tokens.size() == 1 ) {
+							
+							fat.ls( "" );
+						
+						} else if ( tokens.size() == 2 ) {
 
-			case EXIT: {
+							if ( tokens[1].find( "/" ) == string::npos )
+								fat.ls( tokens[1] );
 
-				// case should never occur
-				break;
+							else
+								cout << "error: directory name may not contain /" << endl;
+						} 
+
+						else
+							cout << "error: usage: ls [dir_name]" << endl;
+
+						break;
+					}
+
+					case MKDIR: {
+
+						fat.mkdir();
+						break;
+					}
+
+					case RMDIR: {
+
+						fat.rmdir();
+						break;
+					}
+
+					case SIZE: {
+
+						fat.size();
+						break;
+					}
+
+					case SRM: {
+
+						fat.srm();
+						break;
+					}
+
+					case EXIT: {
+
+						// case should never occur
+						break;
+					}
+				}
 			}
 		}
 
-		printPrompt( image );
+		printPrompt( fat.getCurrentPath() );
+		getline( cin, input, '\n' );
+		tokens = tokenize( input );
 	}
 
 	// Cleanup
@@ -157,17 +200,34 @@ int main( int argc, char * argv[] ) {
 	return 0;
 }
 
+vector<string> tokenize( const string & input ) {
+
+	vector<string> result;
+	stringstream stringStream( input );
+	string temp;
+
+	while ( stringStream >> temp )
+		result.push_back( temp );
+
+	return result;
+}
+
 /**
  * Primpt Prompt
  * Description: Prints command prompt in form username[fs-image-name]> .
  */
-void printPrompt( const string & image ) {
+void printPrompt( const vector<string> & currentPath ) {
 
 	char login[LOGIN_NAME_MAX] = { 0 };
 
 	getlogin_r( login, LOGIN_NAME_MAX );
 
-	cout << login << '[' << image << ']' << "> "; 
+	string path = "/";
+
+	for ( uint32_t i = 0; i < currentPath.size(); i++ )
+		path += currentPath[i] + "/";
+
+	cout << login << '[' << path << ']' << "> "; 
 }
 
 /**
