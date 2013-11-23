@@ -12,4 +12,4 @@ $(OUT): $(OBJECTS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -rf $(OUT)
+	rm -rf $(OUT) *.o

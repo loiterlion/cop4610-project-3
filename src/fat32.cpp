@@ -37,9 +37,14 @@ FAT32::~FAT32() {
 	delete[] this->fat;
 }
 
-const vector<string> & FAT32::getCurrentPath() const {
+const string FAT32::getCurrentPath() const {
 
-	return this->currentPath;
+	string path = "/";
+
+	for ( uint32_t i = 0; i < this->currentPath.size(); i++ )
+		path += this->currentPath[i] + "/";
+
+	return path;
 }
 
 vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
@@ -49,7 +54,7 @@ vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
 	deque<LongDirectoryEntry> longEntries;
 	vector<DirectoryEntry> result;
 
-	for ( uint32_t i = 0; i < size; i += 32 ) {
+	for ( uint32_t i = 0; i < size; i += FATEntrySize ) {
 
 		uint8_t ordinal = contents[i];
 		uint8_t attribute =  contents[i+11];
@@ -93,6 +98,7 @@ vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
 					// Add new DirectoryEntry
 					DirectoryEntry tempDirectoryEntry;
 					tempDirectoryEntry.name = name;
+					tempDirectoryEntry.fullPath = this->getCurrentPath() + name;
 					tempDirectoryEntry.shortEntry = tempShortEntry;
 					result.push_back( tempDirectoryEntry );
 
@@ -208,6 +214,11 @@ inline bool FAT32::isDirectory( const DirectoryEntry & entry ) const {
 	return ( entry.shortEntry.attributes & ( ATTR_DIRECTORY | ATTR_VOLUME_ID ) ) == ATTR_DIRECTORY;
 }
 
+inline bool FAT32::isFile( const DirectoryEntry & entry ) const {
+
+	return ( entry.shortEntry.attributes & ( ATTR_DIRECTORY | ATTR_VOLUME_ID ) ) == 0x00;
+}
+
 inline uint32_t FAT32::formCluster( const ShortDirectoryEntry & entry ) const {
 
 	uint32_t result = 0;
@@ -217,26 +228,122 @@ inline uint32_t FAT32::formCluster( const ShortDirectoryEntry & entry ) const {
 	return result;
 }
 
-int32_t FAT32::findDirectory( const string & directory, uint32_t & index ) const {
+bool FAT32::findDirectory( const string & directoryName, uint32_t & index ) const {
+
+	if ( !isValidEntryName( directoryName ) ) {
+
+		cout << "error: directory name may not contain /." << endl;
+		return false;
+	}
 
 	// Check if directory user want is in current directory
 	for ( uint32_t i = 0; i < currentDirectoryListing.size(); i++ )
-		if ( currentDirectoryListing[i].name.compare( directory ) == 0 ) {
+		if ( currentDirectoryListing[i].name.compare( directoryName ) == 0 ) {
 
 			if ( isDirectory( currentDirectoryListing[i] ) )  {
 
 				index = i;
-				return 0;
+				return true;
 			}
 
-			else 
-				// File not directory
-				return -2;
+			else {
+
+				cout << "error: " << directoryName << " is not a directory." << endl;
+				return false;
+			}
 			
 		}
 
-	// Directory not found
-	return -1;
+	cout << "error: " << directoryName << " not found." << endl;
+	return false;
+}
+
+bool FAT32::findFile( const string & fileName, uint32_t & index ) const {
+
+	if ( !isValidEntryName( fileName ) ) {
+
+		cout << "error: file name may not contain /." << endl;
+		return false;
+	}
+
+	// Check if directory user want is in current directory
+	for ( uint32_t i = 0; i < currentDirectoryListing.size(); i++ )
+		if ( currentDirectoryListing[i].name.compare( fileName ) == 0 ) {
+
+			if ( isFile( currentDirectoryListing[i] ) )  {
+
+				index = i;
+				return true;
+			}
+
+			else {
+
+				cout << "error: " << fileName << " is not a file." << endl;
+				return false;
+			}
+			
+		}
+
+	cout << "error: " << fileName << " not found." << endl;
+	return false;
+}
+
+bool FAT32::findEntry( const string & entryName, uint32_t & index ) const {
+
+	if ( !isValidEntryName( entryName ) ) {
+
+		cout << "error: entry name may not contain /." << endl;
+		return false;
+	}
+
+	// Check if directory user want is in current directory
+	for ( uint32_t i = 0; i < currentDirectoryListing.size(); i++ )
+		if ( currentDirectoryListing[i].name.compare( entryName ) == 0 ) {
+
+			index = i;
+			return true;
+		}
+
+	cout << "error: " << entryName << " not found." << endl;
+	return false;
+}
+
+inline bool FAT32::isValidEntryName( const string & entryName ) const {
+
+	return entryName.find( "/" ) == string::npos;	
+}
+
+inline uint8_t FAT32::isValidOpenMode( const string & openMode ) const {
+
+	uint8_t result = 0;
+
+	if ( openMode.compare( "r" ) == 0 )
+		result = READ;
+
+	else if ( openMode.compare( "w" ) == 0 )
+		result = WRITE;
+
+	else if ( openMode.compare( "rw" ) == 0 )
+		result = READWRITE;
+
+	return result;
+}
+
+inline const string FAT32::modeToString( const uint8_t & mode ) const {
+
+	switch ( mode ) {
+
+		case READ: return "reading";
+		case WRITE: return "writing";
+		case READWRITE: return "reading and writing";
+	}
+
+	return "invalid mode";
+}
+
+bool FAT_FS::operator< ( const DirectoryEntry & left, const DirectoryEntry & right ) {
+
+	return operator<( left.fullPath, right.fullPath );
 }
 
 /**
@@ -259,118 +366,205 @@ void FAT32::fsinfo() const {
 		 << endl;
 }
 
-void FAT32::open() {
+void FAT32::open( const string & fileName, const string & openMode ) {
 
-	cout << "error: unimplmented" << endl;
+	uint8_t mode;
+
+	if ( ( mode = isValidOpenMode( openMode ) ) == 0 ) {
+
+		cout << "error: mode must be either r, w, rw." << endl;
+		return;
+	}
+
+	uint32_t index;
+
+	if ( findFile( fileName, index ) ) {
+
+		if ( this->openFiles.find( this->currentDirectoryListing[index] ) == this->openFiles.end() ) {
+
+			this->openFiles[ this->currentDirectoryListing[index] ] = mode;
+			cout << fileName << " has been opened with " << this->modeToString( mode ) << " permission." << endl;
+		}
+
+		else {
+
+			cout << "error: " << fileName << " already open." << endl;
+			return;
+		}
+	}
 }
 
-void FAT32::close() {
+void FAT32::close( const string & fileName ) {
 
-	cout << "error: unimplmented" << endl;
+	uint32_t index;
+
+	if ( findFile( fileName, index ) ) {
+
+		if ( this->openFiles.find( this->currentDirectoryListing[index] ) != this->openFiles.end() ) {
+
+			this->openFiles.erase( this->currentDirectoryListing[index] );
+			cout << fileName << " is now closed." << endl;
+		}
+
+		else {
+
+			cout << "error: " << fileName << " not found in the open file table." << endl;
+			return;
+		}
+	}
 }
 
 void FAT32::create() {
 
-	cout << "error: unimplmented" << endl;
+	cout << "error: unimplmented." << endl;
 }
 
-void FAT32::read() {
+void FAT32::read( const string & fileName, uint32_t startPos, uint32_t numBytes ) {
 
-	cout << "error: unimplmented" << endl;
+	uint32_t index;
+
+	if ( findFile( fileName, index ) ) {
+
+		DirectoryEntry file = this->currentDirectoryListing[index];
+
+		if ( this->openFiles.find( file ) != this->openFiles.end() ) {
+
+			if ( this->openFiles[file] == READ
+				|| this->openFiles[file] == READWRITE ) {
+
+				cout << "going to read the file that is of size " << file.shortEntry.fileSize << endl;
+
+				// uint32_t size = 0;
+				// uint8_t * contents = getFileContents( cluster, size );
+			
+			} else {
+
+				cout << "error: " << fileName << " not open for reading." << endl;
+				return;
+			} 
+		}
+
+		else {
+
+			cout << "error: " << fileName << " not found in the open file table." << endl;
+			return;
+		}
+	}
+
+	cout << "error: unimplmented." << endl;
 }
 
 void FAT32::write() {
 
-	cout << "error: unimplmented" << endl;
+	cout << "error: unimplmented." << endl;
 }
 
 void FAT32::rm() {
 
-	cout << "error: unimplmented" << endl;
+	cout << "error: unimplmented." << endl;
 }
 
-void FAT32::cd( const string & directory ) {
+void FAT32::cd( const string & directoryName ) {
 
 	uint32_t index;
-	int32_t result;
-	result = findDirectory( directory, index );
 
-	if ( result == 0 ) {
+	if ( findDirectory( directoryName, index ) ) {
 
-		if ( directory.compare( ".." ) == 0 && formCluster( currentDirectoryListing[index].shortEntry ) == 0 ) {
+		if ( directoryName.compare( ".." ) == 0 && formCluster( currentDirectoryListing[index].shortEntry ) == 0 ) {
 
 			this->currentPath.clear();
 			this->currentDirectoryListing = getDirectoryListing( this->bpb.rootCluster );
 
 		} else {
 
-			if ( directory.compare( ".." ) == 0 )
+			if ( directoryName.compare( ".." ) == 0 )
 				this->currentPath.pop_back();
 
-			else if ( directory.compare( "." ) != 0 )
-				this->currentPath.push_back( directory );
+			else if ( directoryName.compare( "." ) != 0 )
+				this->currentPath.push_back( directoryName );
 
 			this->currentDirectoryListing = getDirectoryListing( formCluster( currentDirectoryListing[index].shortEntry ) );
 		}		
 	}
-
-	else if ( result == -1 )
-		cout << "error: cd: " << directory << " not found" << endl;
-
-	else if ( result == -2 )
-		cout << "error: cd: " << directory << " is not a directory" << endl;
 }
 
-void FAT32::ls( const string & directory ) const {
+void FAT32::ls( const string & directoryName ) const {
 
 	vector<DirectoryEntry> listing = currentDirectoryListing;
 
-	if ( !directory.empty() ) {
+	if ( !directoryName.empty() ) {
 
 		uint32_t index;
-		int32_t result;
-		result = findDirectory( directory, index );
 
-		if ( result == 0 )
+		if ( findDirectory( directoryName, index ) )
 			listing = getDirectoryListing( formCluster( currentDirectoryListing[index].shortEntry ) );
 
-		else if ( result == -1 ) {
-
-			cout << "error: ls: " << directory << " not found" << endl;
+		else
 			return;
-		}
-
-		else if ( result == -2 ) {
-
-			cout << "error: ls: " << directory << " is not a directory" << endl;
-			return;
-		}
 	}
 
-	for ( uint32_t i = 0; i < listing.size(); i++ ) {
-
+	for ( uint32_t i = 0; i < listing.size(); i++ )
 		cout << listing[i].name << " ";
-	}
 
 	cout << endl;
 }
 
 void FAT32::mkdir() {
 
-	cout << "error: unimplmented" << endl;
+	cout << "error: unimplmented." << endl;
 }
 
 void FAT32::rmdir() {
 
-	cout << "error: unimplmented" << endl;
+	cout << "error: unimplmented." << endl;
 }
 
-void FAT32::size() {
+void FAT32::size( const string & entryName ) const {
 
-	cout << "error: unimplmented" << endl;
+	uint32_t index;
+
+	if ( findEntry( entryName, index ) ) {
+
+		uint32_t totalSize = 0;
+		DirectoryEntry entry = this->currentDirectoryListing[index];
+
+		if ( isFile( entry ) )
+			totalSize = entry.shortEntry.fileSize;
+
+		else if ( isDirectory( entry ) ) {
+
+			uint32_t size = 0;
+			uint8_t * contents = getFileContents( formCluster( entry.shortEntry ), size );
+
+			for ( uint32_t i = 0; i < size; i += FATEntrySize ) {
+
+				uint8_t ordinal = contents[i];
+
+				// Check if not free entry
+				if ( ordinal != 0xE5 ) {
+
+					// Rest of entries ahead of this are free
+					if ( ordinal == 0x00 )
+						break;
+
+					totalSize += FATEntrySize;
+				}
+			}
+
+			delete[] contents;
+		}
+
+		// Volume ID
+		else
+			totalSize = 0;
+
+		cout << totalSize << " bytes." << endl;
+	}
+
+	cout << "error: waiting on comfirmation from daniel about sizing directory." << endl;
 }
 
 void FAT32::srm() {
 
-	cout << "error: unimplmented" << endl;
+	cout << "error: unimplmented." << endl;
 }

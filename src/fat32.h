@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <vector>
 
 using namespace std;
@@ -22,39 +23,42 @@ const streampos BPB_BytsPerSec = 0xB,
 				BPB_RootClus = 0x2C;
 
 const uint8_t ATTR_READ_ONLY = 0x01,
-					ATTR_HIDDEN = 0x02,
-					ATTR_SYSTEM = 0x04,
-					ATTR_VOLUME_ID = 0x08,
-					ATTR_DIRECTORY = 0x10,
-					ATTR_ARCHIVE = 0x20,
-					ATTR_LONG_NAME = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID,
-					ATTR_LONG_NAME_MASK = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID | ATTR_DIRECTORY | ATTR_ARCHIVE,
-					LAST_LONG_ENTRY = 0x40;
+			  ATTR_HIDDEN = 0x02,
+			  ATTR_SYSTEM = 0x04,
+			  ATTR_VOLUME_ID = 0x08,
+			  ATTR_DIRECTORY = 0x10,
+			  ATTR_ARCHIVE = 0x20,
+			  ATTR_LONG_NAME = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID,
+			  ATTR_LONG_NAME_MASK = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID | ATTR_DIRECTORY | ATTR_ARCHIVE,
+			  LAST_LONG_ENTRY = 0x40,
+			  READ = 0x01,
+			  WRITE = 0x02,
+			  READWRITE = READ|WRITE;
 
-const uint32_t FATEntrySize = 0x4,
-				   FATEntryMask = 0x0FFFFFFF,
-				   FreeCluster = 0x00000000,
-				   EOCMarker = 0x0FFFFFF8,
-				   DIR_Name = 0x00,
-				   DIR_Attr = 0x0B,
-				   DIR_NTRes = 0x0C,
-				   DIR_CrtTimeTenth = 0x0D,
-				   DIR_CrtTime = 0x0E,
-				   DIR_CrtDate = 0x10,
-				   DIR_LstAccDate = 0x12,
-				   DIR_FstClusHI = 0x14,
-				   DIR_WrtTime = 0x16,
-				   DIR_WrtDate = 0x18,
-				   DIR_FstClusLO = 0x1A,
-				   DIR_FileSize = 0x1C,
-				   LDIR_Ord = 0x00,
-				   LDIR_Name1 = 0x01,
-				   LDIR_Attr = 0x0B,
-				   LDIR_Type = 0x0C,
-				   LDIR_Chksum = 0x0D,
-				   LDIR_Name2 = 0x0E,
-				   LDIR_FstClusLO = 0x1A,
-				   LDIR_Name3 = 0x1C;
+const uint32_t FATEntrySize = 0x20,
+			   FATEntryMask = 0x0FFFFFFF,
+			   FreeCluster = 0x00000000,
+			   EOCMarker = 0x0FFFFFF8,
+			   DIR_Name = 0x00,
+			   DIR_Attr = 0x0B,
+			   DIR_NTRes = 0x0C,
+			   DIR_CrtTimeTenth = 0x0D,
+			   DIR_CrtTime = 0x0E,
+			   DIR_CrtDate = 0x10,
+			   DIR_LstAccDate = 0x12,
+			   DIR_FstClusHI = 0x14,
+			   DIR_WrtTime = 0x16,
+			   DIR_WrtDate = 0x18,
+			   DIR_FstClusLO = 0x1A,
+			   DIR_FileSize = 0x1C,
+			   LDIR_Ord = 0x00,
+			   LDIR_Name1 = 0x01,
+			   LDIR_Attr = 0x0B,
+			   LDIR_Type = 0x0C,
+			   LDIR_Chksum = 0x0D,
+			   LDIR_Name2 = 0x0E,
+			   LDIR_FstClusLO = 0x1A,
+			   LDIR_Name3 = 0x1C;
 
 typedef struct BIOSParameterBlock {
 
@@ -121,9 +125,12 @@ typedef struct LongDirectoryEntry {
 typedef struct DirectoryEntry {
 
 	string name;
+	string fullPath;
 	ShortDirectoryEntry shortEntry;
 
 } __attribute__((packed)) DirectoryEntry;
+
+bool operator< ( const DirectoryEntry & left, const DirectoryEntry & right ); 
 
 /**
  * FAT File System
@@ -145,41 +152,48 @@ private:
 
 	vector<uint32_t> freeClusters;
 	vector<DirectoryEntry> currentDirectoryListing;
+	map<DirectoryEntry, uint8_t> openFiles;
 	
 	void convertShortName( string & current, uint8_t * name ) const;
 	void appendLongName( string & current, uint16_t * name, uint32_t size ) const;
-	int32_t findDirectory( const string & directory, uint32_t & index ) const;
+	bool findDirectory( const string & directoryName, uint32_t & index ) const;
+	bool findEntry( const string & entryName, uint32_t & index ) const;
+	bool findFile( const string & fileName, uint32_t & index ) const;
 	inline uint32_t formCluster( const ShortDirectoryEntry & entry ) const;
 	vector<DirectoryEntry> getDirectoryListing( uint32_t cluster ) const;
 	inline uint32_t getFATEntry( uint32_t n ) const;
 	uint8_t * getFileContents( uint32_t initialCluster, uint32_t & size ) const;
 	uint32_t getFirstSectorOfCluster( uint32_t n ) const;
 	inline bool isDirectory( const DirectoryEntry & entry ) const;
+	inline bool isFile( const DirectoryEntry & entry ) const;
 	bool isFreeCluster( uint32_t entry ) const;
+	inline bool isValidEntryName( const string & entryName ) const;
+	inline uint8_t isValidOpenMode( const string & openMode ) const;
+	inline const string modeToString( const uint8_t & mode ) const;
 
 public:
 
 	FAT32( fstream & fatImage );
 	~FAT32();
 
-	const vector<string> & getCurrentPath() const;
+	const string getCurrentPath() const;
 
 	/**
 	 * Commands
 	 */
 	 
 	void fsinfo() const;
-	void open();
-	void close();
+	void open( const string & fileName, const string & openMode  );
+	void close( const string & fileName );
 	void create();
-	void read();
+	void read( const string & fileName, uint32_t startPos, uint32_t numBytes );
 	void write();
 	void rm();
 	void cd( const string & directory );
 	void ls( const string & directory ) const;
 	void mkdir();
 	void rmdir();
-	void size();
+	void size( const string & entryName ) const;
 	void srm();
 
 };

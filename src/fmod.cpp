@@ -1,6 +1,9 @@
 #include "fat32.h"
 #include "limitsfix.h"
 
+#include <cerrno>
+#include <climits>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -20,8 +23,9 @@ enum Command { INVALID, FSINFO, OPEN, CLOSE, CREATE, READ, WRITE, RM, CD, LS, MK
  */
 
 vector<string> tokenize( const string & input );
-void printPrompt( const vector<string> & currentPath );
+void printPrompt( const string & currentPath );
 Command stringToCommand( const string & str  );
+bool stringTouint32( const string & asString, const string & name, uint32_t & out );
 
 int main( int argc, char * argv[] ) {
 
@@ -43,7 +47,7 @@ int main( int argc, char * argv[] ) {
 	// Check if we opened file successfully
 	if ( !fatImage.is_open() ) {
 
-		cout << "error: failed to open " + image << endl;
+		cout << "error: failed to open " + image << "." << endl;
 		exit( EXIT_SUCCESS );
 	}
 
@@ -71,7 +75,7 @@ int main( int argc, char * argv[] ) {
 
 					case INVALID: {
 
-						cout << "error: Invalid command, please try again" << endl;
+						cout << "error: Invalid command, please try again." << endl;
 						break;
 					}
 
@@ -83,13 +87,23 @@ int main( int argc, char * argv[] ) {
 
 					case OPEN: {
 
-						fat.open();
+						if ( tokens.size() == 3 )
+							fat.open( tokens[1], tokens[2] );
+
+						else
+							cout << "error: usage: open <file name> <mode>" << endl;
+
 						break;
 					}
 
 					case CLOSE: {
 
-						fat.close();
+						if ( tokens.size() == 2 )
+							fat.close( tokens[1] );
+
+						else
+							cout << "error: usage: close <file name>" << endl;
+
 						break;
 					}
 
@@ -101,7 +115,20 @@ int main( int argc, char * argv[] ) {
 
 					case READ: {
 
-						fat.read();
+						if ( tokens.size() == 4 ) {
+
+							uint32_t startPos, numBytes;
+
+							if ( !stringTouint32( tokens[2], "start pos", startPos ) 
+								|| !stringTouint32( tokens[3], "num bytes", numBytes ) )
+								break;
+
+							fat.read( tokens[1], startPos, numBytes );
+						}
+
+						else
+							cout << "error: usage: read <file name> <start pos> <num bytes>" << endl;
+
 						break;
 					}
 
@@ -119,38 +146,25 @@ int main( int argc, char * argv[] ) {
 
 					case CD: {
 
-						if ( tokens.size() == 2 ) {
-
-							if ( tokens[1].find( "/" ) == string::npos )
-								fat.cd( tokens[1] );
-
-							else
-								cout << "error: directory name may not contain /" << endl;
-						} 
+						if ( tokens.size() == 2 )
+							fat.cd( tokens[1] );
 
 						else
-							cout << "error: usage: cd [dir_name]" << endl;
+							cout << "error: usage: cd <dir name>" << endl;
 
 						break;
 					}
 
 					case LS: {
 
-						if ( tokens.size() == 1 ) {
-							
+						if ( tokens.size() == 1 )
 							fat.ls( "" );
 						
-						} else if ( tokens.size() == 2 ) {
-
-							if ( tokens[1].find( "/" ) == string::npos )
-								fat.ls( tokens[1] );
-
-							else
-								cout << "error: directory name may not contain /" << endl;
-						} 
+						else if ( tokens.size() == 2 )
+							fat.ls( tokens[1] );
 
 						else
-							cout << "error: usage: ls [dir_name]" << endl;
+							cout << "error: usage: ls [dir name]" << endl;
 
 						break;
 					}
@@ -169,7 +183,12 @@ int main( int argc, char * argv[] ) {
 
 					case SIZE: {
 
-						fat.size();
+						if ( tokens.size() == 2 )
+							fat.size( tokens[1] );
+
+						else
+							cout << "error: usage: size <entry name>" << endl;
+
 						break;
 					}
 
@@ -196,7 +215,7 @@ int main( int argc, char * argv[] ) {
 	// Cleanup
 	fatImage.close();
 
-	cout << "\nClosing fmod" << endl;
+	cout << "\nClosing fmod." << endl;
 	return 0;
 }
 
@@ -212,22 +231,31 @@ vector<string> tokenize( const string & input ) {
 	return result;
 }
 
+bool stringTouint32( const string & asString, const string & name, uint32_t & out ) {
+
+	unsigned long int converted = strtol( asString.c_str(), NULL, 10 );
+
+	if ( ( errno == ERANGE && converted == ULONG_MAX ) || converted > UINT32_MAX ) {
+
+		cout << name << " too large. Must be less than " << UINT32_MAX << endl;
+		return false;
+	}
+
+	out = static_cast<uint32_t>( converted );
+	return true;
+}
+
 /**
  * Primpt Prompt
  * Description: Prints command prompt in form username[fs-image-name]> .
  */
-void printPrompt( const vector<string> & currentPath ) {
+void printPrompt( const string & currentPath ) {
 
 	char login[LOGIN_NAME_MAX] = { 0 };
 
 	getlogin_r( login, LOGIN_NAME_MAX );
 
-	string path = "/";
-
-	for ( uint32_t i = 0; i < currentPath.size(); i++ )
-		path += currentPath[i] + "/";
-
-	cout << login << '[' << path << ']' << "> "; 
+	cout << login << '[' << currentPath << ']' << "> "; 
 }
 
 /**
