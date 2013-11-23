@@ -432,10 +432,20 @@ void FAT32::read( const string & fileName, uint32_t startPos, uint32_t numBytes 
 			if ( this->openFiles[file] == READ
 				|| this->openFiles[file] == READWRITE ) {
 
-				cout << "going to read the file that is of size " << file.shortEntry.fileSize << endl;
+				uint32_t size = 0;
+				uint8_t * contents = getFileContents( formCluster( file.shortEntry ), size );
 
-				// uint32_t size = 0;
-				// uint8_t * contents = getFileContents( cluster, size );
+				if ( startPos >= file.shortEntry.fileSize )
+					cout << "error: start_pos (" << startPos << ") greater than file size (" 
+						<< file.shortEntry.fileSize << "). Note: start_pos is zero-based." << endl;
+
+				else {
+
+					for ( uint32_t i = 0; i < numBytes; i++ )
+						cout << contents[ startPos + i ];
+				}
+
+				delete[] contents;
 			
 			} else {
 
@@ -450,8 +460,6 @@ void FAT32::read( const string & fileName, uint32_t startPos, uint32_t numBytes 
 			return;
 		}
 	}
-
-	cout << "error: unimplmented." << endl;
 }
 
 void FAT32::write() {
