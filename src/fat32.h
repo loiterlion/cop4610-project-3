@@ -13,15 +13,7 @@ using namespace std;
 
 namespace FAT_FS {
 
-// FAT Markers
-const streampos BPB_BytsPerSec = 0xB,
-				BPB_SecPerClus = 0xD,
-				BPB_RsvdSecCnt = 0xE,
-				BPB_NumFATs = 0x10,
-				BPB_TotSec32 = 0x20,
-				BPB_FATSz32 = 0x24,
-				BPB_RootClus = 0x2C;
-
+// FAT Markers/Constants
 const uint8_t ATTR_READ_ONLY = 0x01,
 			  ATTR_HIDDEN = 0x02,
 			  ATTR_SYSTEM = 0x04,
@@ -30,10 +22,7 @@ const uint8_t ATTR_READ_ONLY = 0x01,
 			  ATTR_ARCHIVE = 0x20,
 			  ATTR_LONG_NAME = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID,
 			  ATTR_LONG_NAME_MASK = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID | ATTR_DIRECTORY | ATTR_ARCHIVE,
-			  LAST_LONG_ENTRY = 0x40,
-			  READ = 0x01,
-			  WRITE = 0x02,
-			  READWRITE = READ|WRITE;
+			  LAST_LONG_ENTRY = 0x40;
 
 const uint32_t FATEntrySize = 0x20,
 			   FATEntryMask = 0x0FFFFFFF,
@@ -59,6 +48,15 @@ const uint32_t FATEntrySize = 0x20,
 			   LDIR_Name2 = 0x0E,
 			   LDIR_FstClusLO = 0x1A,
 			   LDIR_Name3 = 0x1C;
+
+// Open Mode Constants
+const uint8_t READ = 0x01,
+			  WRITE = 0x02,
+			  READWRITE = READ|WRITE;
+
+/**
+ * FAT Data Structures
+ */
 
 typedef struct BIOSParameterBlock {
 
@@ -140,22 +138,16 @@ class FAT32 {
 
 private:
 
-	// BIOS Parameter Block Info
 	BIOSParameterBlock bpb;
-
-	uint32_t firstDataSector, fatLocation;
-
+	uint32_t firstDataSector, fatLocation, * fat;
 	fstream & fatImage;
-	uint32_t * fat;
-
 	vector<string> currentPath;
-
 	vector<uint32_t> freeClusters;
 	vector<DirectoryEntry> currentDirectoryListing;
 	map<DirectoryEntry, uint8_t> openFiles;
 	
-	void convertShortName( string & current, uint8_t * name ) const;
 	void appendLongName( string & current, uint16_t * name, uint32_t size ) const;
+	void convertShortName( string & current, uint8_t * name ) const;
 	bool findDirectory( const string & directoryName, uint32_t & index ) const;
 	bool findEntry( const string & entryName, uint32_t & index ) const;
 	bool findFile( const string & fileName, uint32_t & index ) const;
