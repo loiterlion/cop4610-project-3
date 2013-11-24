@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 #include <cstdint>
 #include <cwchar>
 #include <deque>
@@ -7,6 +8,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <string>
 #include <vector>
 
 using namespace std;
@@ -30,7 +32,7 @@ const uint8_t ATTR_READ_ONLY = 0x01,
 const uint16_t LONG_NAME_TRAIL = 0xFFFF,
 			   LONG_NAME_NULL = 0x0000;
 
-const uint32_t FATEntrySize = 0x20,
+const uint32_t FATEntrySize = 0x04,
 			   FATEntryMask = 0x0FFFFFFF,
 			   FreeCluster = 0x00000000,
 			   EOCMarker = 0x0FFFFFF8,
@@ -80,31 +82,31 @@ typedef struct BIOSParameterBlock {
 
 typedef struct ShortDirectoryEntry {
 
-	uint8_t name[11];			
-	uint8_t attributes;		
-	uint8_t NTReserved;		
-	uint8_t createdTimeTenth;	
-	uint16_t createdTime;		
-	uint16_t createdDate;		
-	uint16_t lastAccessDate;	
-	uint16_t firstClusterHI;	
-	uint16_t writeTime;		
-	uint16_t writeDate;		
-	uint16_t firstClusterLO;	
-	uint32_t fileSize;	
+	uint8_t name[11];
+	uint8_t attributes;
+	uint8_t NTReserved;
+	uint8_t createdTimeTenth;
+	uint16_t createdTime;
+	uint16_t createdDate;
+	uint16_t lastAccessDate;
+	uint16_t firstClusterHI;
+	uint16_t writeTime;
+	uint16_t writeDate;
+	uint16_t firstClusterLO;
+	uint32_t fileSize;
 
 } __attribute__((packed)) ShortDirectoryEntry;
 
 typedef struct LongDirectoryEntry {
 
-	uint8_t ordinal;  		
-	uint16_t name1[5];		
-	uint8_t attributes;		
-	uint8_t type;				
-	uint8_t checksum;			
-	uint16_t name2[6];		
-	uint16_t firstClusterLO;	
-	uint16_t name3[2];		
+	uint8_t ordinal;
+	uint16_t name1[5];
+	uint8_t attributes;
+	uint8_t type;
+	uint8_t checksum;
+	uint16_t name2[6];
+	uint16_t firstClusterLO;
+	uint16_t name3[2];
 
 } __attribute__((packed)) LongDirectoryEntry;
 
@@ -114,9 +116,9 @@ typedef struct DirectoryEntry {
 	string fullPath;
 	ShortDirectoryEntry shortEntry;
 
-} __attribute__((packed)) DirectoryEntry;
+} DirectoryEntry;
 
-bool operator< ( const DirectoryEntry & left, const DirectoryEntry & right ); 
+bool operator< ( const DirectoryEntry & left, const DirectoryEntry & right );
 
 /**
  * FAT File System

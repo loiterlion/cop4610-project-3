@@ -24,7 +24,7 @@ FAT32::FAT32( fstream & fatImage ) : fatImage( fatImage ) {
 	uint32_t fatEntries = ( this->bpb.FATSz32 * this->bpb.bytesPerSector ) / FATEntrySize;
 	this->fat = new uint32_t[fatEntries];
 	this->fatImage.seekg( this->fatLocation );
-	this->fatImage.read( reinterpret_cast<char *>( this->fat ), this->bpb.FATSz32 * this->bpb.bytesPerSector );
+	this->fatImage.read( reinterpret_cast<char *>( this->fat ), fatEntries *  FATEntrySize );
 
 	// Find free clusters
 	uint32_t entry;
