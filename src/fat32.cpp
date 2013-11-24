@@ -21,14 +21,18 @@ FAT32::FAT32( fstream & fatImage ) : fatImage( fatImage ) {
 	this->fatLocation = this->bpb.reservedSectorCount * this->bpb.bytesPerSector;
 
 	// Read in fat
-	uint32_t fatEntries = ( this->bpb.FATSz32 * this->bpb.bytesPerSector ) / FAT_ENTRY_SIZE;
-	this->fat = new uint32_t[fatEntries];
+	// Note: The extra 2 entries allocated are for the reserved clusters which the countOfClusters formula 
+	// 		 doesn't account for
+	uint32_t countOfClusters = ( ( this->bpb.totalSectors32 - this->firstDataSector ) / this->bpb.sectorsPerCluster );
+	this->fat = new uint32_t[countOfClusters + 2];
 	this->fatImage.seekg( this->fatLocation );
-	this->fatImage.read( reinterpret_cast<char *>( this->fat ), fatEntries *  FAT_ENTRY_SIZE );
+	this->fatImage.read( reinterpret_cast<char *>( this->fat ), countOfClusters + 2 *  FAT_ENTRY_SIZE );
 
 	// Find free clusters
+	// Note: We ignore the 2 reserved clusters and therefore also check the last 2
 	uint32_t entry;
-	for ( uint32_t i = 0; i < fatEntries; i++ )
+	uint32_t range = countOfClusters + 2;
+	for ( uint32_t i = 2; i < range; i++ )
 		if ( isFreeCluster( ( entry = getFATEntry( i ) ) ) )
 			this->freeClusters.push_back( i );
 
