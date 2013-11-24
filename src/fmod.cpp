@@ -2,11 +2,11 @@
 #include "limitsfix.h"
 
 #include <cerrno>
-#include <climits>
-#include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <sstream>
+#include <stdint.h>
 #include <string>
 #include <unistd.h>
 
@@ -252,9 +252,9 @@ bool stringTouint32( const string & asString, const string & name, uint32_t & ou
 	unsigned long int converted = strtol( asString.c_str(), NULL, 10 );
 
 	// Do an error/range check
-	if ( ( errno == ERANGE && converted == ULONG_MAX ) || converted > UINT32_MAX ) {
+	if ( ( errno == ERANGE && converted == numeric_limits<unsigned long>::max() ) || converted > numeric_limits<uint32_t>::max() ) {
 
-		cout << name << " too large. Must be less than " << UINT32_MAX << endl;
+		cout << name << " too large. Must be less than " << numeric_limits<uint32_t>::max() << endl;
 		return false;
 	}
 

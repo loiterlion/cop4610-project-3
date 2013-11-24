@@ -1,13 +1,12 @@
 #pragma once
 
+#include <cstdlib>
 #include <cstring>
-#include <cstdint>
-#include <cwchar>
 #include <deque>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <map>
+#include <stdint.h>
 #include <string>
 #include <vector>
 

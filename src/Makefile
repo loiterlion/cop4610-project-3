@@ -1,7 +1,7 @@
 OUT = fmod
 OBJECTS = fmod.o fat32.o
 SOURCE_DIR = src
-CFLAGS = -Wall -Wextra -std=c++11
+CFLAGS = -Wall -Wextra
 CC = g++
 
 $(OUT): $(OBJECTS)
