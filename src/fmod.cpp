@@ -38,7 +38,7 @@ int main( int argc, char * argv[] ) {
 
 	else {
 
-		cout << "usage: fmod <FAT Image>" << endl;
+		cout << "usage: fmod <FAT32 Image>" << endl;
 		exit( EXIT_SUCCESS );
 	}
 
