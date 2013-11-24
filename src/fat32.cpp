@@ -21,10 +21,10 @@ FAT32::FAT32( fstream & fatImage ) : fatImage( fatImage ) {
 	this->fatLocation = this->bpb.reservedSectorCount * this->bpb.bytesPerSector;
 
 	// Read in fat
-	uint32_t fatEntries = ( this->bpb.FATSz32 * this->bpb.bytesPerSector ) / FATEntrySize;
+	uint32_t fatEntries = ( this->bpb.FATSz32 * this->bpb.bytesPerSector ) / FAT_ENTRY_SIZE;
 	this->fat = new uint32_t[fatEntries];
 	this->fatImage.seekg( this->fatLocation );
-	this->fatImage.read( reinterpret_cast<char *>( this->fat ), fatEntries *  FATEntrySize );
+	this->fatImage.read( reinterpret_cast<char *>( this->fat ), fatEntries *  FAT_ENTRY_SIZE );
 
 	// Find free clusters
 	uint32_t entry;
@@ -331,7 +331,7 @@ void FAT32::size( const string & entryName ) const {
 			uint8_t * contents = getFileContents( formCluster( entry.shortEntry ), size );
 
 			// Calculate number of non-free entries
-			for ( uint32_t i = 0; i < size; i += FATEntrySize ) {
+			for ( uint32_t i = 0; i < size; i += DIR_ENTRY_SIZE ) {
 
 				uint8_t ordinal = contents[i];
 
@@ -342,7 +342,7 @@ void FAT32::size( const string & entryName ) const {
 					if ( ordinal == 0x00 )
 						break;
 
-					totalSize += FATEntrySize;
+					totalSize += DIR_ENTRY_SIZE;
 				}
 			}
 
@@ -561,7 +561,7 @@ vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
 	vector<DirectoryEntry> result;
 
 	// Parse contents
-	for ( uint32_t i = 0; i < size; i += FATEntrySize ) {
+	for ( uint32_t i = 0; i < size; i += DIR_ENTRY_SIZE ) {
 
 
 		uint8_t ordinal = contents[i];
@@ -634,7 +634,7 @@ vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
  */
 inline uint32_t FAT32::getFATEntry( uint32_t n ) const {
 
-	return this->fat[n] & FATEntryMask;
+	return this->fat[n] & FAT_ENTRY_MASK;
 }
 
 /*
@@ -655,7 +655,7 @@ uint8_t * FAT32::getFileContents( uint32_t initialCluster, uint32_t & size ) con
 
 		clusterChain.push_back( nextCluster );
 
-	} while ( ( nextCluster = getFATEntry( nextCluster ) ) < EOCMarker  );
+	} while ( ( nextCluster = getFATEntry( nextCluster ) ) < EOC );
 
 	size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
 
@@ -722,7 +722,7 @@ inline bool FAT32::isFile( const DirectoryEntry & entry ) const {
  */
 inline bool FAT32::isFreeCluster( uint32_t value ) const {
 
-	return ( value == FreeCluster );
+	return ( value == FREE_CLUSTER );
 }
 
 /*

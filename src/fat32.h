@@ -32,10 +32,11 @@ const uint8_t ATTR_READ_ONLY = 0x01,
 const uint16_t LONG_NAME_TRAIL = 0xFFFF,
 			   LONG_NAME_NULL = 0x0000;
 
-const uint32_t FATEntrySize = 0x04,
-			   FATEntryMask = 0x0FFFFFFF,
-			   FreeCluster = 0x00000000,
-			   EOCMarker = 0x0FFFFFF8,
+const uint32_t FAT_ENTRY_SIZE = 0x04,
+			   FAT_ENTRY_MASK = 0x0FFFFFFF,
+			   FREE_CLUSTER = 0x00000000,
+			   EOC = 0x0FFFFFF8,
+			   DIR_ENTRY_SIZE = 0x20,
 			   DIR_Attr = 0x0B,
 			   DIR_Name_Length = 0x0B;  	
 
