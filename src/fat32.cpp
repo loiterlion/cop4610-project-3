@@ -187,7 +187,7 @@ void FAT32::read( const string & fileName, uint32_t startPos, uint32_t numBytes 
 
 				// Otherwise print file contents up to numBytes
 				else
-					for ( uint32_t i = 0; i < numBytes && i < file.shortEntry.fileSize; i++ )
+					for ( uint32_t i = 0; i < numBytes && startPos + i < file.shortEntry.fileSize; i++ )
 						cout << contents[ startPos + i ];
 
 				delete[] contents;
