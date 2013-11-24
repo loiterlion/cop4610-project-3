@@ -248,12 +248,11 @@ void FAT32::cd( const string & directoryName ) {
 			if ( directoryName.compare( ".." ) == 0 )
 				this->currentPath.pop_back();
 
-			// Don't do anything if we are still using the same directory
-			else if ( directoryName.compare( "." ) != 0 ) {
-
+			// Don't add . to currentPath
+			else if ( directoryName.compare( "." ) != 0 )
 				this->currentPath.push_back( directoryName );
-				this->currentDirectoryListing = getDirectoryListing( formCluster( currentDirectoryListing[index].shortEntry ) );
-			}
+
+			this->currentDirectoryListing = getDirectoryListing( formCluster( currentDirectoryListing[index].shortEntry ) );
 		}		
 	}
 }
