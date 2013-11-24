@@ -22,32 +22,20 @@ const uint8_t ATTR_READ_ONLY = 0x01,
 			  ATTR_ARCHIVE = 0x20,
 			  ATTR_LONG_NAME = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID,
 			  ATTR_LONG_NAME_MASK = ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID | ATTR_DIRECTORY | ATTR_ARCHIVE,
-			  LAST_LONG_ENTRY = 0x40;
+			  LAST_LONG_ENTRY = 0x40,
+			  SHORT_NAME_SPACE_PAD = 0x20,
+			  DIR_FREE_ENTRY = 0xE5,
+			  DIR_LAST_FREE_ENTRY = 0x00;
+
+const uint16_t LONG_NAME_TRAIL = 0xFFFF,
+			   LONG_NAME_NULL = 0x0000;
 
 const uint32_t FATEntrySize = 0x20,
 			   FATEntryMask = 0x0FFFFFFF,
 			   FreeCluster = 0x00000000,
 			   EOCMarker = 0x0FFFFFF8,
-			   DIR_Name = 0x00,
 			   DIR_Attr = 0x0B,
-			   DIR_NTRes = 0x0C,
-			   DIR_CrtTimeTenth = 0x0D,
-			   DIR_CrtTime = 0x0E,
-			   DIR_CrtDate = 0x10,
-			   DIR_LstAccDate = 0x12,
-			   DIR_FstClusHI = 0x14,
-			   DIR_WrtTime = 0x16,
-			   DIR_WrtDate = 0x18,
-			   DIR_FstClusLO = 0x1A,
-			   DIR_FileSize = 0x1C,
-			   LDIR_Ord = 0x00,
-			   LDIR_Name1 = 0x01,
-			   LDIR_Attr = 0x0B,
-			   LDIR_Type = 0x0C,
-			   LDIR_Chksum = 0x0D,
-			   LDIR_Name2 = 0x0E,
-			   LDIR_FstClusLO = 0x1A,
-			   LDIR_Name3 = 0x1C;
+			   DIR_Name_Length = 0x0B;  	
 
 // Open Mode Constants
 const uint8_t READ = 0x01,
@@ -147,7 +135,7 @@ private:
 	map<DirectoryEntry, uint8_t> openFiles;
 	
 	void appendLongName( string & current, uint16_t * name, uint32_t size ) const;
-	void convertShortName( string & current, uint8_t * name ) const;
+	const string convertShortName( uint8_t * name ) const;
 	bool findDirectory( const string & directoryName, uint32_t & index ) const;
 	bool findEntry( const string & entryName, uint32_t & index ) const;
 	bool findFile( const string & fileName, uint32_t & index ) const;
@@ -155,10 +143,10 @@ private:
 	vector<DirectoryEntry> getDirectoryListing( uint32_t cluster ) const;
 	inline uint32_t getFATEntry( uint32_t n ) const;
 	uint8_t * getFileContents( uint32_t initialCluster, uint32_t & size ) const;
-	uint32_t getFirstSectorOfCluster( uint32_t n ) const;
+	inline uint32_t getFirstDataSectorOfCluster( uint32_t n ) const;
 	inline bool isDirectory( const DirectoryEntry & entry ) const;
 	inline bool isFile( const DirectoryEntry & entry ) const;
-	bool isFreeCluster( uint32_t entry ) const;
+	inline bool isFreeCluster( uint32_t value ) const;
 	inline bool isValidEntryName( const string & entryName ) const;
 	inline uint8_t isValidOpenMode( const string & openMode ) const;
 	inline const string modeToString( const uint8_t & mode ) const;

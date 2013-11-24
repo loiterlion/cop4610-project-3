@@ -119,6 +119,7 @@ int main( int argc, char * argv[] ) {
 
 							uint32_t startPos, numBytes;
 
+							// Try to convert arguments
 							if ( !stringTouint32( tokens[2], "start pos", startPos ) 
 								|| !stringTouint32( tokens[3], "num bytes", numBytes ) )
 								break;
@@ -157,9 +158,11 @@ int main( int argc, char * argv[] ) {
 
 					case LS: {
 
+						// List current directory
 						if ( tokens.size() == 1 )
 							fat.ls( "" );
 						
+						// Otherwise list specified directory
 						else if ( tokens.size() == 2 )
 							fat.ls( tokens[1] );
 
@@ -207,6 +210,7 @@ int main( int argc, char * argv[] ) {
 			}
 		}
 
+		// Ask for input again and process
 		printPrompt( fat.getCurrentPath() );
 		getline( cin, input, '\n' );
 		tokens = tokenize( input );
@@ -219,22 +223,35 @@ int main( int argc, char * argv[] ) {
 	return 0;
 }
 
+/*
+ * Tokenize String
+ * Description: Returns a list of tokens from a string split apart
+ *				by spaces (multiple ignored).
+ */
 vector<string> tokenize( const string & input ) {
 
 	vector<string> result;
 	stringstream stringStream( input );
 	string temp;
 
+	// operator>> of stringstream will ignore extra
+	// spaces just like cin >>
 	while ( stringStream >> temp )
 		result.push_back( temp );
 
 	return result;
 }
 
+/*
+ * String to uint32_t
+ * Description: Attempts to convert a string to a uint32_t. Returns whether
+ *				or not the operation succeeded.
+ */
 bool stringTouint32( const string & asString, const string & name, uint32_t & out ) {
 
 	unsigned long int converted = strtol( asString.c_str(), NULL, 10 );
 
+	// Do an error/range check
 	if ( ( errno == ERANGE && converted == ULONG_MAX ) || converted > UINT32_MAX ) {
 
 		cout << name << " too large. Must be less than " << UINT32_MAX << endl;
