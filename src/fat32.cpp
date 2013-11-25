@@ -1,5 +1,8 @@
 #include "fat32.h"
 
+// REMOVE
+#include <unistd.h>
+
 using namespace FAT_FS;
 
 /**
@@ -17,21 +20,25 @@ FAT32::FAT32( fstream & fatImage ) : fatImage( fatImage ) {
 	this->fatImage.seekg( 0 );
 	this->fatImage.read( reinterpret_cast<char *>( &this->bpb ), sizeof( this->bpb ) );
 
+	// Read FSInfo
+	this->fatImage.seekg( this->bpb.FSInfo * this->bpb.bytesPerSector );
+	this->fatImage.read( reinterpret_cast<char *>( &this->fsInfo ), sizeof( this->fsInfo ) );
+
 	this->firstDataSector = this->bpb.reservedSectorCount + ( this->bpb.numFATs * this->bpb.FATSz32 );
 	this->fatLocation = this->bpb.reservedSectorCount * this->bpb.bytesPerSector;
 
 	// Read in fat
 	// Note: The extra 2 entries allocated are for the reserved clusters which the countOfClusters formula 
 	// 		 doesn't account for
-	uint32_t countOfClusters = ( ( this->bpb.totalSectors32 - this->firstDataSector ) / this->bpb.sectorsPerCluster );
-	this->fat = new uint32_t[countOfClusters + 2];
+	this->countOfClusters = ( ( this->bpb.totalSectors32 - this->firstDataSector ) / this->bpb.sectorsPerCluster );
+	this->fat = new uint32_t[this->countOfClusters + 2];
 	this->fatImage.seekg( this->fatLocation );
-	this->fatImage.read( reinterpret_cast<char *>( this->fat ), countOfClusters + 2 *  FAT_ENTRY_SIZE );
+	this->fatImage.read( reinterpret_cast<char *>( this->fat ), ( this->countOfClusters + 2 ) *  FAT_ENTRY_SIZE );
 
 	// Find free clusters
 	// Note: We ignore the 2 reserved clusters and therefore also check the last 2
 	uint32_t entry;
-	uint32_t range = countOfClusters + 2;
+	uint32_t range = this->countOfClusters + 2;
 	for ( uint32_t i = 2; i < range; i++ )
 		if ( isFreeCluster( ( entry = getFATEntry( i ) ) ) )
 			this->freeClusters.push_back( i );
@@ -49,7 +56,7 @@ FAT32::~FAT32() {
 	delete[] this->fat;
 }
 
-/*
+/**
  * Get Current Path
  * Description: Builds and returns a / separated path to the
  *				current directory.
@@ -81,10 +88,10 @@ void FAT32::fsinfo() const {
 		 << "\nNumber of FATs: " << +this->bpb.numFATs
 		 << "\nSectors per FAT: " << this->bpb.FATSz32
 		 << "\nNumber of free sectors: " << this->freeClusters.size() * this->bpb.sectorsPerCluster
-		 << endl;
+		 << "\n";
 }
 
-/*
+/**
  * Open File
  * Description: Attempts to open a file in the currrent directory 
  *				with r, w, or rw permissions and places it in
@@ -97,7 +104,7 @@ void FAT32::open( const string & fileName, const string & openMode ) {
 	// Validate openMode
 	if ( ( mode = isValidOpenMode( openMode ) ) == 0 ) {
 
-		cout << "error: mode must be either r, w, rw." << endl;
+		cout << "error: mode must be either r, w, rw.\n";
 		return;
 	}
 
@@ -110,19 +117,19 @@ void FAT32::open( const string & fileName, const string & openMode ) {
 		if ( this->openFiles.find( this->currentDirectoryListing[index] ) == this->openFiles.end() ) {
 
 			this->openFiles[ this->currentDirectoryListing[index] ] = mode;
-			cout << fileName << " has been opened with " << this->modeToString( mode ) << " permission." << endl;
+			cout << fileName << " has been opened with " << this->modeToString( mode ) << " permission.\n";
 		}
 
 		// File is already open
 		else {
 
-			cout << "error: " << fileName << " already open." << endl;
+			cout << "error: " << fileName << " already open.\n";
 			return;
 		}
 	}
 }
 
-/*
+/**
  * Close File
  * Description: Attempts to close a file that's in the current directory
  *				and open file table.
@@ -138,28 +145,28 @@ void FAT32::close( const string & fileName ) {
 		if ( this->openFiles.find( this->currentDirectoryListing[index] ) != this->openFiles.end() ) {
 
 			this->openFiles.erase( this->currentDirectoryListing[index] );
-			cout << fileName << " is now closed." << endl;
+			cout << fileName << " is now closed.\n";
 		}
 
 		// File isn't in the table
 		else {
 
-			cout << "error: " << fileName << " not found in the open file table." << endl;
+			cout << "error: " << fileName << " not found in the open file table.\n";
 			return;
 		}
 	}
 }
 
-/*
+/**
  * Create File
  * Description: TODO: Needs Description
  */
 void FAT32::create() {
 
-	cout << "error: unimplmented." << endl;
+	cout << "error: unimplmented.\n";
 }
 
-/*
+/**
  * Read File
  * Description: Attempts to read a file if it's in the open file table. Reads
  *				the file starting at startPos and reads up to numBytes.
@@ -181,13 +188,13 @@ void FAT32::read( const string & fileName, uint32_t startPos, uint32_t numBytes 
 				|| this->openFiles[file] == READWRITE ) {
 
 				// Read file contents
-				uint32_t size = 0;
-				uint8_t * contents = getFileContents( formCluster( file.shortEntry ), size );
+				vector<uint32_t> clusterChain;
+				uint8_t * contents = getFileContents( formCluster( file.shortEntry ), clusterChain );
 
 				// Validate startPos against size
 				if ( startPos >= file.shortEntry.fileSize )
 					cout << "error: start_pos (" << startPos << ") greater than file size (" 
-						<< file.shortEntry.fileSize << "). Note: start_pos is zero-based." << endl;
+						<< file.shortEntry.fileSize << "). Note: start_pos is zero-based.\n";
 
 				// Otherwise print file contents up to numBytes
 				else
@@ -198,38 +205,101 @@ void FAT32::read( const string & fileName, uint32_t startPos, uint32_t numBytes 
 			
 			} else {
 
-				cout << "error: " << fileName << " not open for reading." << endl;
+				cout << "error: " << fileName << " not open for reading.\n";
 				return;
 			} 
 		}
 
 		else {
 
-			cout << "error: " << fileName << " not found in the open file table." << endl;
+			cout << "error: " << fileName << " not found in the open file table.\n";
 			return;
 		}
 	}
 }
 
-/*
+/**
  * Write to File
  * Description: TODO: Needs Description
  */
 void FAT32::write() {
 
-	cout << "error: unimplmented." << endl;
+	cout << "error: unimplmented.\n";
 }
 
-/*
+/**
  * Remove File
- * Description: TODO: Needs Description
+ * Description: Removes a file from and updates all necessary records.
+ *				Actually marks a file as free but doesn't zero out.
  */
-void FAT32::rm() {
+void FAT32::rm( const string & fileName, bool safe ) {
 
-	cout << "error: unimplmented." << endl;
+	uint32_t index;
+
+	// Try and find file
+	if ( findFile( fileName, index ) ) {
+
+		DirectoryEntry file = this->currentDirectoryListing[index];
+
+		vector<uint32_t> clusterChain;
+
+		// Check if we need to zero out file contents
+		if ( safe )
+			zeroOutFileContents( formCluster( file.shortEntry ) );
+
+		uint32_t nextCluster = formCluster( file.shortEntry );
+
+		// Build list of clusters ( potentially remaining if we crashed ) for this file
+		do {
+
+			clusterChain.push_back( nextCluster );
+
+		// We must also check if the nextCluster is free because we may have crashed while deleting this
+		} while ( ( nextCluster = getFATEntry( nextCluster ) ) < EOC && nextCluster != FREE_CLUSTER );	
+
+		for ( vector<uint32_t>::reverse_iterator itr = clusterChain.rbegin(); itr != clusterChain.rend(); itr++ ) {
+
+			setClusterValue( *itr, FREE_CLUSTER );
+			this->freeClusters.push_back( *itr );
+			this->fsInfo.freeCount++;
+		}
+
+		// Update all FATs
+		for ( uint8_t i = 0; i < this->bpb.numFATs; i++ ) {
+
+			uint32_t fatLocation = this->bpb.reservedSectorCount * this->bpb.bytesPerSector + ( i * this->bpb.FATSz32 * this->bpb.bytesPerSector );
+			this->fatImage.seekp( fatLocation );
+			this->fatImage.write( reinterpret_cast<char *>( this->fat ), ( this->countOfClusters + 2 ) *  FAT_ENTRY_SIZE );
+		}
+
+		// Update FSInfo
+		this->fatImage.seekp( this->bpb.FSInfo * this->bpb.bytesPerSector );
+		this->fatImage.write( reinterpret_cast<char *>( &this->fsInfo ), sizeof( this->fsInfo ) );
+
+		// Delete directory entry
+		for ( uint32_t i = 0; i < file.longEntries.size(); i++ ) {
+
+			if ( safe )
+				memset( &file.longEntries[i], 0, sizeof( file.longEntries[i] ) - sizeof( file.longEntries[i].location ) );
+
+			file.longEntries[i].ordinal = DIR_FREE_ENTRY;
+			deleteLongDirectoryEntry( file.longEntries[i] );
+		}
+
+		// Check if this is the last entry in a directory
+		if ( safe )
+				memset( &file.shortEntry, 0, sizeof( file.shortEntry ) - sizeof( file.shortEntry.location ) );
+		file.shortEntry.name[0] = ( index + 1 == this->currentDirectoryListing.size() ) ? DIR_LAST_FREE_ENTRY : DIR_FREE_ENTRY; 
+		deleteShortDirectoryEntry( file.shortEntry );
+
+		// Don't let OS wait to flush
+		this->fatImage.flush();
+
+		this->currentDirectoryListing.erase( this->currentDirectoryListing.begin() + index );
+	}
 }
 
-/*
+/**
  * Change Directory
  * Description: Attempts to change to a directory within the current directory.
  */
@@ -261,7 +331,7 @@ void FAT32::cd( const string & directoryName ) {
 	}
 }
 
-/*
+/**
  * List Files
  * Description: Lists all files in either the current directory or 
  *				given directory if it exists.
@@ -288,28 +358,28 @@ void FAT32::ls( const string & directoryName ) const {
 	for ( uint32_t i = 0; i < listing.size(); i++ )
 		cout << listing[i].name << " ";
 
-	cout << endl;
+	cout << "\n";
 }
 
-/*
+/**
  * Make Directory
  * Description: TODO: Needs Description
  */
 void FAT32::mkdir() {
 
-	cout << "error: unimplmented." << endl;
+	cout << "error: unimplmented.\n";
 }
 
-/*
+/**
  * Remove Directory
  * Description: TODO: Needs Description
  */
 void FAT32::rmdir() {
 
-	cout << "error: unimplmented." << endl;
+	cout << "error: unimplmented.\n";
 }
 
-/*
+/**
  * Size of File
  * Description: Attempts to print the size of the file or directory given. 
  */
@@ -331,8 +401,9 @@ void FAT32::size( const string & entryName ) const {
 		else if ( isDirectory( entry ) ) {
 
 			// Get all of directory
-			uint32_t size = 0;
-			uint8_t * contents = getFileContents( formCluster( entry.shortEntry ), size );
+			vector<uint32_t> clusterChain;
+			uint8_t * contents = getFileContents( formCluster( entry.shortEntry ), clusterChain );
+			uint32_t size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
 
 			// Calculate number of non-free entries
 			for ( uint32_t i = 0; i < size; i += DIR_ENTRY_SIZE ) {
@@ -357,26 +428,17 @@ void FAT32::size( const string & entryName ) const {
 		else
 			totalSize = 0;
 
-		cout << totalSize << " bytes." << endl;
+		cout << totalSize << " bytes.\n";
 	}
 
-	cout << "error: waiting on comfirmation from daniel about sizing directory." << endl;
-}
-
-/*
- * Safe Remove File
- * Description: TODO: Needs Description
- */
-void FAT32::srm() {
-
-	cout << "error: unimplmented." << endl;
+	cout << "error: waiting on comfirmation from daniel about sizing directory.\n";
 }
 
 /**
  * FAT32 Private Methods
  */
 
-/*
+/**
  * Append Long Name
  * Description: Appends a LongDirectoryEntry's name to a string currently
  *				being built to represent the full name.
@@ -399,7 +461,19 @@ void FAT32::appendLongName( string & current, uint16_t * name, uint32_t size ) c
 	}
 }
 
-/*
+/**
+ * Calculate Directory Entry Location
+ * Description: Calculates exact byte location of a given directory entries relative byte
+ *				to the directory with the cluster chain associated with it
+ */
+inline uint32_t FAT32::calculateDirectoryEntryLocation( uint32_t byte, vector<uint32_t> clusterChain ) const {
+
+	return ( this->getFirstDataSectorOfCluster( 
+				clusterChain[ byte / ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector ) ] ) * this->bpb.bytesPerSector 
+		   ) + ( byte % ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector ) );
+}
+
+/**
  * Convert Short Name
  * Description: Converts a ShortEntry's name to a string. Also accounts
  *				for the implied '.'.
@@ -440,7 +514,27 @@ const string FAT32::convertShortName( uint8_t * name ) const {
 	return result;
 }
 
-/*
+/**
+ * Delete Long Directory Entry
+ * Description: Deletes a Long Directory Entry from the FS.
+ */
+inline void FAT32::deleteLongDirectoryEntry( LongDirectoryEntry entry ) {
+
+	this->fatImage.seekp( entry.location );
+	this->fatImage.write( reinterpret_cast<char *>( &entry ), DIR_ENTRY_SIZE );
+}
+
+/**
+ * Delete Short Directory Entry
+ * Description: Deletes a Short Directory Entry from the FS.
+ */
+inline void FAT32::deleteShortDirectoryEntry( ShortDirectoryEntry entry ) {
+
+	this->fatImage.seekp( entry.location );
+	this->fatImage.write( reinterpret_cast<char *>( &entry ), DIR_ENTRY_SIZE );
+}
+
+/**
  * Find Directory
  * Description: Returns whether or not a directory is in the current directory and
  *				if it is, the passed index is set.
@@ -450,7 +544,7 @@ bool FAT32::findDirectory( const string & directoryName, uint32_t & index ) cons
 	// Check if directoryName is valid
 	if ( !isValidEntryName( directoryName ) ) {
 
-		cout << "error: directory name may not contain /." << endl;
+		cout << "error: directory name may not contain /.\n";
 		return false;
 	}
 
@@ -466,17 +560,17 @@ bool FAT32::findDirectory( const string & directoryName, uint32_t & index ) cons
 
 			else {
 
-				cout << "error: " << directoryName << " is not a directory." << endl;
+				cout << "error: " << directoryName << " is not a directory.\n";
 				return false;
 			}
 			
 		}
 
-	cout << "error: " << directoryName << " not found." << endl;
+	cout << "error: " << directoryName << " not found.\n";
 	return false;
 }
 
-/*
+/**
  * Find Entry
  * Description: Returns whether or not an entry is in the current directory and
  *				if it is, the passed index is set.
@@ -486,7 +580,7 @@ bool FAT32::findEntry( const string & entryName, uint32_t & index ) const {
 	// Check if entryName is valid
 	if ( !isValidEntryName( entryName ) ) {
 
-		cout << "error: entry name may not contain /." << endl;
+		cout << "error: entry name may not contain /.\n";
 		return false;
 	}
 
@@ -498,11 +592,11 @@ bool FAT32::findEntry( const string & entryName, uint32_t & index ) const {
 			return true;
 		}
 
-	cout << "error: " << entryName << " not found." << endl;
+	cout << "error: " << entryName << " not found.\n";
 	return false;
 }
 
-/*
+/**
  * Find File
  * Description: Returns whether or not a file is in the current directory and
  *				if it is, the passed index is set.
@@ -512,7 +606,7 @@ bool FAT32::findFile( const string & fileName, uint32_t & index ) const {
 	// Check if fileName is valid
 	if ( !isValidEntryName( fileName ) ) {
 
-		cout << "error: file name may not contain /." << endl;
+		cout << "error: file name may not contain /.\n";
 		return false;
 	}
 
@@ -528,17 +622,17 @@ bool FAT32::findFile( const string & fileName, uint32_t & index ) const {
 
 			else {
 
-				cout << "error: " << fileName << " is not a file." << endl;
+				cout << "error: " << fileName << " is not a file.\n";
 				return false;
 			}
 			
 		}
 
-	cout << "error: " << fileName << " not found." << endl;
+	cout << "error: " << fileName << " not found.\n";
 	return false;
 }
 
-/*
+/**
  * Form Cluster
  * Description: Concatenates the low and high order bits of a ShortDirectoryEntry
  *				to form the cluster number of that entry.
@@ -552,21 +646,21 @@ inline uint32_t FAT32::formCluster( const ShortDirectoryEntry & entry ) const {
 	return result;
 }
 
-/*
+/**
  * Get Directory Listing
  * Description: Returns a list of DirectoryEntries for a given cluster.
  * Expects: cluster to be a valid data cluster.
  */
 vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
 
-	uint32_t size = 0;
-	uint8_t * contents = getFileContents( cluster, size );
+	vector<uint32_t> clusterChain;
+	uint8_t * contents = getFileContents( cluster, clusterChain );
+	uint32_t size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
 	deque<LongDirectoryEntry> longEntries;
 	vector<DirectoryEntry> result;
 
 	// Parse contents
 	for ( uint32_t i = 0; i < size; i += DIR_ENTRY_SIZE ) {
-
 
 		uint8_t ordinal = contents[i];
 		uint8_t attribute =  contents[i + DIR_Attr];
@@ -582,7 +676,11 @@ vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
 			if ( ( attribute & ATTR_LONG_NAME_MASK ) == ATTR_LONG_NAME ) {
 
 				LongDirectoryEntry tempLongEntry;
-				memcpy( &tempLongEntry, contents+i, sizeof( LongDirectoryEntry ) );
+				memcpy( &tempLongEntry, contents+i, sizeof( LongDirectoryEntry ) - sizeof( uint32_t ) );
+
+				// Store this location in case we ever need to remove this entry
+				tempLongEntry.location = calculateDirectoryEntryLocation( i, clusterChain );
+
 				longEntries.push_front( tempLongEntry );
 
 			// Otherwise it's a file
@@ -592,7 +690,8 @@ vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
 				uint8_t attr = attribute & ( ATTR_DIRECTORY | ATTR_VOLUME_ID );
 
 				ShortDirectoryEntry tempShortEntry;
-				memcpy( &tempShortEntry, contents+i, sizeof( ShortDirectoryEntry ) );
+				memcpy( &tempShortEntry, contents+i, sizeof( ShortDirectoryEntry ) - sizeof( uint32_t ) );
+				tempShortEntry.location = calculateDirectoryEntryLocation( i, clusterChain );
 
 				// Build long entry name if there were any
 				if ( !longEntries.empty() )
@@ -614,6 +713,7 @@ vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
 					tempDirectoryEntry.name = name;
 					tempDirectoryEntry.fullPath = this->getCurrentPath() + name;
 					tempDirectoryEntry.shortEntry = tempShortEntry;
+					tempDirectoryEntry.longEntries = longEntries;
 					result.push_back( tempDirectoryEntry );
 
 				} else {
@@ -632,7 +732,7 @@ vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
 	return result;
 }
 
-/*
+/**
  * Get FAT Entry
  * Description: Returns the value of a FAT entry without its upper 4 bits.
  */
@@ -641,16 +741,14 @@ inline uint32_t FAT32::getFATEntry( uint32_t n ) const {
 	return this->fat[n] & FAT_ENTRY_MASK;
 }
 
-/*
+/**
  * Get File Contents
  * Description: Returns a buffer of the contents of a file starting at a given
- *				initial cluster. Also sets the size of this buffer. This function
- *				will cause the program to abort if we are given a cluster that
- *				leads to an empty chain.
+ *				initial cluster. Also sets the cluster chain of this buffer. 
+ *				This function will cause the program to abort if we are given 
+ *				a cluster that leads to an empty chain.
  */
-uint8_t * FAT32::getFileContents( uint32_t initialCluster, uint32_t & size ) const {
-
-	vector<uint32_t> clusterChain;
+uint8_t * FAT32::getFileContents( uint32_t initialCluster, vector<uint32_t> & clusterChain ) const {
 
 	uint32_t nextCluster = initialCluster;
 
@@ -661,7 +759,7 @@ uint8_t * FAT32::getFileContents( uint32_t initialCluster, uint32_t & size ) con
 
 	} while ( ( nextCluster = getFATEntry( nextCluster ) ) < EOC );
 
-	size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
+	uint32_t size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
 
 	uint8_t * data = NULL;
 
@@ -693,7 +791,7 @@ uint8_t * FAT32::getFileContents( uint32_t initialCluster, uint32_t & size ) con
 	return data;
 }
 
-/*
+/**
  * Get First Sector of Cluster
  * Description: Returns the first data sector of a given cluster.
  */
@@ -702,7 +800,7 @@ inline uint32_t FAT32::getFirstDataSectorOfCluster( uint32_t n ) const {
 	return ( ( n - 2 ) * this->bpb.sectorsPerCluster ) + this->firstDataSector;
 }
 
-/*
+/**
  * Is Directory
  * Description: Checks if given entry is a directory.
  */
@@ -711,7 +809,7 @@ inline bool FAT32::isDirectory( const DirectoryEntry & entry ) const {
 	return ( entry.shortEntry.attributes & ( ATTR_DIRECTORY | ATTR_VOLUME_ID ) ) == ATTR_DIRECTORY;
 }
 
-/*
+/**
  * Is File
  * Description: Checks if given entry is a file.
  */
@@ -720,7 +818,7 @@ inline bool FAT32::isFile( const DirectoryEntry & entry ) const {
 	return ( entry.shortEntry.attributes & ( ATTR_DIRECTORY | ATTR_VOLUME_ID ) ) == 0x00;
 }
 
-/*
+/**
  * Is Free Cluster
  * Description: Checks if given cluster's value represents that it's free.
  */
@@ -729,7 +827,7 @@ inline bool FAT32::isFreeCluster( uint32_t value ) const {
 	return ( value == FREE_CLUSTER );
 }
 
-/*
+/**
  * Is Valid Entry Name
  * Description: Checks if a given entry name is valid.
  */
@@ -738,7 +836,7 @@ inline bool FAT32::isValidEntryName( const string & entryName ) const {
 	return entryName.find( "/" ) == string::npos;	
 }
 
-/*
+/**
  * Is Valid Open Mode
  * Description: Checks if a given file open mode is valid.
  */
@@ -758,7 +856,7 @@ inline uint8_t FAT32::isValidOpenMode( const string & openMode ) const {
 	return result;
 }
 
-/*
+/**
  * File Open Mode to String
  * Description: Converts an open mode to a representative string.
  */
@@ -775,10 +873,57 @@ inline const string FAT32::modeToString( const uint8_t & mode ) const {
 }
 
 /**
+ * Set Cluster Value
+ * Description: Sets a cluster entry to a given value.
+ */
+inline void FAT32::setClusterValue( uint32_t n, uint32_t newValue ) {
+
+	// Make sure we don't overwrite upper 4 bits
+	newValue &= FAT_ENTRY_MASK;
+
+	// Reset entry preserving upper 4 bits
+	this->fat[n] &= ~FAT_ENTRY_MASK;
+
+	// Set new value
+	this->fat[n] |= newValue;
+}
+
+/**
+ * Zero Out File Contents
+ * Description: Zeros out a file for safety purposes.
+ */
+void FAT32::zeroOutFileContents( uint32_t initialCluster ) const {
+
+	vector<uint32_t> clusterChain;
+	uint32_t nextCluster = initialCluster;
+
+	// Build list of clusters for this file
+	do {
+
+		clusterChain.push_back( nextCluster );
+
+	} while ( ( nextCluster = getFATEntry( nextCluster ) ) < EOC );
+
+	uint8_t * zeros = new uint8_t[this->bpb.bytesPerSector];
+	memset( zeros, 0, this->bpb.bytesPerSector );
+
+	// Write out zeros
+	for ( uint32_t i = 0; i < clusterChain.size(); i++ ) {
+
+		this->fatImage.seekp( this->getFirstDataSectorOfCluster( clusterChain[i] ) * this->bpb.bytesPerSector  );
+
+		for ( uint32_t j = 0; j < this->bpb.sectorsPerCluster ; j++ )
+			this->fatImage.write( reinterpret_cast<char *>( zeros ), this->bpb.bytesPerSector );
+	}
+
+	delete[] zeros;
+}
+
+/**
  * FAT_FS Functions
  */
 
-/*
+/**
  * Less Than Operator for DirectoryEntry
  * Description: Used for std::map. A DirectoryEntry is considered less than
  *				another if its full path is less than the others.

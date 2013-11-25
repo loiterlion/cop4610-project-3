@@ -75,7 +75,7 @@ int main( int argc, char * argv[] ) {
 
 					case INVALID: {
 
-						cout << "error: Invalid command, please try again." << endl;
+						cout << "error: Invalid command, please try again.\n";
 						break;
 					}
 
@@ -91,7 +91,7 @@ int main( int argc, char * argv[] ) {
 							fat.open( tokens[1], tokens[2] );
 
 						else
-							cout << "error: usage: open <file name> <mode>" << endl;
+							cout << "error: usage: open <file name> <mode>\n";
 
 						break;
 					}
@@ -102,7 +102,7 @@ int main( int argc, char * argv[] ) {
 							fat.close( tokens[1] );
 
 						else
-							cout << "error: usage: close <file name>" << endl;
+							cout << "error: usage: close <file name>\n";
 
 						break;
 					}
@@ -128,7 +128,7 @@ int main( int argc, char * argv[] ) {
 						}
 
 						else
-							cout << "error: usage: read <file name> <start pos> <num bytes>" << endl;
+							cout << "error: usage: read <file name> <start pos> <num bytes>\n";
 
 						break;
 					}
@@ -141,7 +141,12 @@ int main( int argc, char * argv[] ) {
 
 					case RM: {
 
-						fat.rm();
+						if ( tokens.size() == 2 )
+							fat.rm( tokens[1] );
+
+						else
+							cout << "error: usage: rm <file name>\n";
+
 						break;
 					}
 
@@ -151,7 +156,7 @@ int main( int argc, char * argv[] ) {
 							fat.cd( tokens[1] );
 
 						else
-							cout << "error: usage: cd <dir name>" << endl;
+							cout << "error: usage: cd <dir name>\n";
 
 						break;
 					}
@@ -167,7 +172,7 @@ int main( int argc, char * argv[] ) {
 							fat.ls( tokens[1] );
 
 						else
-							cout << "error: usage: ls [dir name]" << endl;
+							cout << "error: usage: ls [dir name]\n";
 
 						break;
 					}
@@ -190,14 +195,19 @@ int main( int argc, char * argv[] ) {
 							fat.size( tokens[1] );
 
 						else
-							cout << "error: usage: size <entry name>" << endl;
+							cout << "error: usage: size <entry name>\n";
 
 						break;
 					}
 
 					case SRM: {
 
-						fat.srm();
+						if ( tokens.size() == 2 )
+							fat.rm( tokens[1], true );
+
+						else
+							cout << "error: usage: srm <file name>\n";
+
 						break;
 					}
 
@@ -223,7 +233,7 @@ int main( int argc, char * argv[] ) {
 	return 0;
 }
 
-/*
+/**
  * Tokenize String
  * Description: Returns a list of tokens from a string split apart
  *				by spaces (multiple ignored).
@@ -242,7 +252,7 @@ vector<string> tokenize( const string & input ) {
 	return result;
 }
 
-/*
+/**
  * String to uint32_t
  * Description: Attempts to convert a string to a uint32_t. Returns whether
  *				or not the operation succeeded.
@@ -254,7 +264,7 @@ bool stringTouint32( const string & asString, const string & name, uint32_t & ou
 	// Do an error/range check
 	if ( ( errno == ERANGE && converted == numeric_limits<unsigned long>::max() ) || converted > numeric_limits<uint32_t>::max() ) {
 
-		cout << name << " too large. Must be less than " << numeric_limits<uint32_t>::max() << endl;
+		cout << name << " too large. Must be less than " << numeric_limits<uint32_t>::max() << "\n";
 		return false;
 	}
 
