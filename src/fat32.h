@@ -196,7 +196,7 @@ public:
 	void ls( const string & directory ) const;
 	void mkdir();
 	void rmdir();
-	void size( const string & entryName ) const;
+	void size( const string & fileName ) const;
 
 };
 

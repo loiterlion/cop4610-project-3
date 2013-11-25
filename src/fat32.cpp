@@ -383,55 +383,15 @@ void FAT32::rmdir() {
  * Size of File
  * Description: Attempts to print the size of the file or directory given. 
  */
-void FAT32::size( const string & entryName ) const {
+void FAT32::size( const string & fileName ) const {
 
 	uint32_t index;
 
 	// Try and find entry
-	if ( findEntry( entryName, index ) ) {
-
-		uint32_t totalSize = 0;
-		DirectoryEntry entry = this->currentDirectoryListing[index];
-
-		// Check if entry is a file
-		if ( isFile( entry ) )
-			totalSize = entry.shortEntry.fileSize;
-
-		// Check if entry is a directory
-		else if ( isDirectory( entry ) ) {
-
-			// Get all of directory
-			vector<uint32_t> clusterChain;
-			uint8_t * contents = getFileContents( formCluster( entry.shortEntry ), clusterChain );
-			uint32_t size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
-
-			// Calculate number of non-free entries
-			for ( uint32_t i = 0; i < size; i += DIR_ENTRY_SIZE ) {
-
-				uint8_t ordinal = contents[i];
-
-				// Check if not free entry
-				if ( ordinal != 0xE5 ) {
-
-					// Rest of entries ahead of this are free
-					if ( ordinal == 0x00 )
-						break;
-
-					totalSize += DIR_ENTRY_SIZE;
-				}
-			}
-
-			delete[] contents;
-		}
-
-		// Otherwise it's a Volume ID
-		else
-			totalSize = 0;
-
-		cout << totalSize << " bytes.\n";
-	}
-
-	cout << "error: TODO: waiting on comfirmation from daniel about sizing directory.\n";
+	// Note: per the email conversation only a file should be sized and not
+	// 		 directories or volume labels
+	if ( findFile( fileName, index ) )
+		cout << this->currentDirectoryListing[index].shortEntry.fileSize << " bytes.\n";
 }
 
 /**

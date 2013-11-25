@@ -195,7 +195,7 @@ int main( int argc, char * argv[] ) {
 							fat.size( tokens[1] );
 
 						else
-							cout << "error: usage: size <entry name>\n";
+							cout << "error: usage: size <file name>\n";
 
 						break;
 					}
