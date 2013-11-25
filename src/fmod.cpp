@@ -13,24 +13,16 @@
 using namespace std;
 
 /**
- * enums
- */
-
-enum Command { INVALID, FSINFO, OPEN, CLOSE, CREATE, READ, WRITE, RM, CD, LS, MKDIR, RMDIR, SIZE, SRM, EXIT };
-
-/**
  * Forward Declarations
  */
 
 vector<string> tokenize( const string & input );
 void printPrompt( const string & currentPath );
-Command stringToCommand( const string & str  );
 bool stringTouint32( const string & asString, const string & name, uint32_t & out );
 
 int main( int argc, char * argv[] ) {
 
 	string input, image;
-	Command command;
 	fstream fatImage;
 
 	if ( argc == 2 )
@@ -65,158 +57,108 @@ int main( int argc, char * argv[] ) {
 
 		if ( !tokens.empty() ) {
 
-			if ( ( command = stringToCommand( tokens[0] ) ) == EXIT )
+			if ( tokens[0].compare( "exit" ) == 0 )
 				break;
 
-			else {
+			else if ( tokens[0].compare( "fsinfo" ) == 0 ) {
 
-				// Run command
-				switch ( command ) {
+				fat.fsinfo();
 
-					case INVALID: {
+			} else if ( tokens[0].compare( "open" ) == 0 ) {
 
-						cout << "error: Invalid command, please try again.\n";
-						break;
-					}
+				if ( tokens.size() == 3 )
+					fat.open( tokens[1], tokens[2] );
 
-					case FSINFO: {
+				else
+					cout << "error: usage: open <file name> <mode>\n";
 
-						fat.fsinfo();
-						break;
-					}
+			} else if ( tokens[0].compare( "close" ) == 0 ) {
 
-					case OPEN: {
+				if ( tokens.size() == 2 )
+					fat.close( tokens[1] );
 
-						if ( tokens.size() == 3 )
-							fat.open( tokens[1], tokens[2] );
+				else
+					cout << "error: usage: close <file name>\n";
 
-						else
-							cout << "error: usage: open <file name> <mode>\n";
+			} else if ( tokens[0].compare( "create" ) == 0 ) {
 
-						break;
-					}
+				fat.create();
+				
+			} else if ( tokens[0].compare( "read" ) == 0 ) {
 
-					case CLOSE: {
+				if ( tokens.size() == 4 ) {
 
-						if ( tokens.size() == 2 )
-							fat.close( tokens[1] );
+					uint32_t startPos, numBytes;
 
-						else
-							cout << "error: usage: close <file name>\n";
-
-						break;
-					}
-
-					case CREATE: {
-
-						fat.create();
-						break;
-					}
-
-					case READ: {
-
-						if ( tokens.size() == 4 ) {
-
-							uint32_t startPos, numBytes;
-
-							// Try to convert arguments
-							if ( !stringTouint32( tokens[2], "start pos", startPos ) 
-								|| !stringTouint32( tokens[3], "num bytes", numBytes ) )
-								break;
-
-							fat.read( tokens[1], startPos, numBytes );
-						}
-
-						else
-							cout << "error: usage: read <file name> <start pos> <num bytes>\n";
-
-						break;
-					}
-
-					case WRITE: {
-
-						fat.write();
-						break;
-					}
-
-					case RM: {
-
-						if ( tokens.size() == 2 )
-							fat.rm( tokens[1] );
-
-						else
-							cout << "error: usage: rm <file name>\n";
-
-						break;
-					}
-
-					case CD: {
-
-						if ( tokens.size() == 2 )
-							fat.cd( tokens[1] );
-
-						else
-							cout << "error: usage: cd <dir name>\n";
-
-						break;
-					}
-
-					case LS: {
-
-						// List current directory
-						if ( tokens.size() == 1 )
-							fat.ls( "" );
-						
-						// Otherwise list specified directory
-						else if ( tokens.size() == 2 )
-							fat.ls( tokens[1] );
-
-						else
-							cout << "error: usage: ls [dir name]\n";
-
-						break;
-					}
-
-					case MKDIR: {
-
-						fat.mkdir();
-						break;
-					}
-
-					case RMDIR: {
-
-						fat.rmdir();
-						break;
-					}
-
-					case SIZE: {
-
-						if ( tokens.size() == 2 )
-							fat.size( tokens[1] );
-
-						else
-							cout << "error: usage: size <file name>\n";
-
-						break;
-					}
-
-					case SRM: {
-
-						if ( tokens.size() == 2 )
-							fat.rm( tokens[1], true );
-
-						else
-							cout << "error: usage: srm <file name>\n";
-
-						break;
-					}
-
-					case EXIT: {
-
-						// case should never occur
-						break;
-					}
+					// Try to convert arguments
+					if ( stringTouint32( tokens[2], "start pos", startPos ) && stringTouint32( tokens[3], "num bytes", numBytes ) )
+						fat.read( tokens[1], startPos, numBytes );
 				}
+
+				else
+					cout << "error: usage: read <file name> <start pos> <num bytes>\n";
+
+			} else if ( tokens[0].compare( "write" ) == 0 ) {
+
+				fat.write();
+
+			} else if ( tokens[0].compare( "rm" ) == 0 ) {
+
+				if ( tokens.size() == 2 )
+					fat.rm( tokens[1] );
+
+				else
+					cout << "error: usage: rm <file name>\n";
+
+			} else if ( tokens[0].compare( "cd" ) == 0 ) {
+
+				if ( tokens.size() == 2 )
+					fat.cd( tokens[1] );
+
+				else
+					cout << "error: usage: cd <dir name>\n";
+				
+			} else if ( tokens[0].compare( "ls" ) == 0 ) {
+
+				// List current directory
+				if ( tokens.size() == 1 )
+					fat.ls( "" );
+				
+				// Otherwise list specified directory
+				else if ( tokens.size() == 2 )
+					fat.ls( tokens[1] );
+
+				else
+					cout << "error: usage: ls [dir name]\n";
+
+			} else if ( tokens[0].compare( "mkdir" ) == 0 ) {
+
+				fat.mkdir();
+				
+			} else if ( tokens[0].compare( "rmdir" ) == 0 ) {
+
+				fat.rmdir();
+
+			} else if ( tokens[0].compare( "size" ) == 0 ) {
+
+				if ( tokens.size() == 2 )
+					fat.size( tokens[1] );
+
+				else
+					cout << "error: usage: size <file name>\n";
+				
+			} else if ( tokens[0].compare( "srm" ) == 0 ) {
+
+				if ( tokens.size() == 2 )
+					fat.rm( tokens[1], true );
+
+				else
+					cout << "error: usage: srm <file name>\n";
+
+			// Invalid command
+			} else {
+
+				cout << "error: Invalid command, please try again.\n";
 			}
 		}
 
@@ -283,58 +225,4 @@ void printPrompt( const string & currentPath ) {
 	getlogin_r( login, LOGIN_NAME_MAX );
 
 	cout << login << '[' << currentPath << ']' << "> "; 
-}
-
-/**
- * String to Command
- * Description: Converts a string to its Command form.
- * Returns: The strings respective Command; otherwise INVALID.
- */
-Command stringToCommand( const string & str  ) {
-
-	Command result = INVALID;
-
-	if ( str.compare( "fsinfo" ) == 0 )
-		result = FSINFO;
-
-	else if ( str.compare( "open" ) == 0 )
-		result = OPEN;
-
-	else if ( str.compare( "close" ) == 0 )
-		result = CLOSE;
-
-	else if ( str.compare( "create" ) == 0 )
-		result = CREATE;
-
-	else if ( str.compare( "read" ) == 0 )
-		result = READ;
-
-	else if ( str.compare( "write" ) == 0 )
-		result = WRITE;
-
-	else if ( str.compare( "rm" ) == 0 )
-		result = RM;
-
-	else if ( str.compare( "cd" ) == 0 )
-		result = CD;
-
-	else if ( str.compare( "ls" ) == 0 )
-		result = LS;
-
-	else if ( str.compare( "mkdir" ) == 0 )
-		result = MKDIR;
-
-	else if ( str.compare( "rmdir" ) == 0 )
-		result = RMDIR;
-
-	else if ( str.compare( "size" ) == 0 )
-		result = SIZE;
-
-	else if ( str.compare( "srm" ) == 0 )
-		result = SRM;
-
-	else if ( str.compare( "exit" ) == 0 )
-		result = EXIT;
-
-	return result;
 }
