@@ -431,7 +431,7 @@ void FAT32::size( const string & entryName ) const {
 		cout << totalSize << " bytes.\n";
 	}
 
-	cout << "error: waiting on comfirmation from daniel about sizing directory.\n";
+	cout << "error: TODO: waiting on comfirmation from daniel about sizing directory.\n";
 }
 
 /**
