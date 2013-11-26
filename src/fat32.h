@@ -1,7 +1,11 @@
 #pragma once
 
+#include <cctype>
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <deque>
 #include <fstream>
 #include <iostream>
@@ -9,6 +13,8 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+
+#include <iomanip>
 
 using namespace std;
 
@@ -154,6 +160,7 @@ private:
 	
 	void appendLongName( string & current, uint16_t * name, uint32_t size ) const;
 	inline uint32_t calculateDirectoryEntryLocation( uint32_t byte, vector<uint32_t> clusterChain ) const;
+	void convertLongNameSegment( uint16_t * nameInStruct, uint8_t length, uint8_t & charLeft, bool & nullStored, const string & name );
 	const string convertShortName( uint8_t * name ) const;
 	inline void deleteLongDirectoryEntry( LongDirectoryEntry entry );
 	inline void deleteShortDirectoryEntry( ShortDirectoryEntry entry );
@@ -161,6 +168,7 @@ private:
 	bool findEntry( const string & entryName, uint32_t & index ) const;
 	bool findFile( const string & fileName, uint32_t & index ) const;
 	inline uint32_t formCluster( const ShortDirectoryEntry & entry ) const;
+	const string generateBasisName( const string & longName, bool & lossyConversion ) const;
 	vector<DirectoryEntry> getDirectoryListing( uint32_t cluster ) const;
 	inline uint32_t getFATEntry( uint32_t n ) const;
 	uint8_t * getFileContents( uint32_t initialCluster, vector<uint32_t> & clusterChain ) const;
@@ -172,6 +180,7 @@ private:
 	inline uint8_t isValidOpenMode( const string & openMode ) const;
 	inline const string modeToString( const uint8_t & mode ) const;
 	inline void setClusterValue( uint32_t n, uint32_t newValue );
+	inline bool shortEntryNameExists( string & name );
 	void zeroOutFileContents( uint32_t initialCluster ) const;
 
 public:
@@ -188,7 +197,7 @@ public:
 	void fsinfo() const;
 	void open( const string & fileName, const string & openMode  );
 	void close( const string & fileName );
-	void create();
+	void create( const string & fileName );
 	void read( const string & fileName, uint32_t startPos, uint32_t numBytes );
 	void write();
 	void rm( const string & fileName, bool safe = false );

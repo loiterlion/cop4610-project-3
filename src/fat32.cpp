@@ -1,8 +1,5 @@
 #include "fat32.h"
 
-// REMOVE
-#include <unistd.h>
-
 using namespace FAT_FS;
 
 /**
@@ -161,9 +158,218 @@ void FAT32::close( const string & fileName ) {
  * Create File
  * Description: TODO: Needs Description
  */
-void FAT32::create() {
+void FAT32::create( const string & fileName ) {
+
+	string copy = fileName;
+	vector<LongDirectoryEntry> longEntries;
+
+	// Ignore trailing periods
+	size_t trailing = copy.find_last_not_of( "." );
+	if ( trailing != string::npos)
+    	copy.erase( trailing + 1 );
+
+	if ( copy.length() <= 255 ) {
+
+		if ( ( getCurrentPath().length() + copy.length() ) <= 260 ) {
+
+			// Validate fileName
+			for ( unsigned int i = 0; i < copy.length(); i++ )
+				if ( copy[i] < ' ' || copy[i] == '"' || copy[i] == '*' || copy[i] == '/' 
+					|| copy[i] == ':' || copy[i] == '<'  || copy[i] == '>' || copy[i] == '?' 
+					||  copy[i] == '\\'|| copy[i] == '|' ) {
+
+					cout << "error: illegal character (" << copy[i] << ") in file name.\n";
+					return;
+				}
+
+			cout << "long name is: " << copy << endl;
+
+			bool lossyConversion = false;
+			string basisName = generateBasisName( copy, lossyConversion );
+
+			bool fits = false;
+			uint8_t periodCount = 0;
+			for ( uint8_t i = 0; i < copy.length(); i++ )
+				if ( copy[i] == '.' )
+					periodCount++;
+
+			if (  ( copy.length() <= 11 && copy.find( "." ) == string::npos ) 
+				|| ( copy.length() <= 12 && periodCount == 1 ) )
+				fits = true;
+
+			// Check if we even need to do the algorithm
+			if ( lossyConversion || !fits || shortEntryNameExists( basisName ) ) {
+
+				char nBuffer[7] = {0};
+				string primaryName = basisName.substr( 0, 8 );
+				primaryName = primaryName.substr( 0, primaryName.find( " " ) );
+
+				for ( uint32_t start = 1; start <= 999999; start++ ) {
+
+					sprintf( nBuffer, "%d", start );
+					primaryName = primaryName.substr( 0, min( primaryName.length(), 8 - ( strlen( nBuffer ) + 1 ) ) ) + "~" + nBuffer;
+
+					if ( !shortEntryNameExists( primaryName ) )
+						break;
+				}
+
+				basisName = primaryName + basisName.substr( 8, string::npos );
+
+			}
+
+			cout << "basis-name again: \"" << basisName << "\"" << endl;
+
+			ShortDirectoryEntry shortEntry;
+
+			// Copy in basis name
+			for ( uint8_t i = 0; i < 11; i++ )
+				shortEntry.name[i] = basisName[i];
+
+			shortEntry.attributes = ATTR_ARCHIVE;
+			shortEntry.NTReserved = 0x00;
+			shortEntry.firstClusterHI = 0x0000;
+			shortEntry.firstClusterLO = 0x0000;
+			shortEntry.fileSize = 0x00000000;
+
+			// MS-DOS epoch is 01/01/1980
+			time_t timeNow = time( NULL );
+			struct tm * tmNow = localtime( &timeNow );
+
+			// 0-4: Day of Month, 5-8: Month of Year, 9-15: Years since 1980
+			uint16_t date = ( tmNow->tm_mday & 0x0000001F )
+						| ( ( ( tmNow->tm_mon + 1 ) & 0x0000000F ) << 5 )
+						| ( ( ( tmNow->tm_year - 80 ) & 0x000000EF ) << 9 );
+
+			// 0-4: Seconds, 5-10: Minutes, 11-15: Hours
+			uint16_t time = ( ( tmNow->tm_sec / 2 ) & 0x0000001F )
+						| ( ( tmNow->tm_min & 0x0000002F ) << 5 )
+						| ( ( tmNow->tm_hour & 0x0000001F ) << 11 );
+
+			
+
+			shortEntry.writeDate = shortEntry.lastAccessDate = shortEntry.createdDate = date;
+			shortEntry.writeTime = shortEntry.createdTime = time;
+
+			//shortEntry.createdTimeTenth = 
+
+			// Calculate number of Long Directory Entries needed
+			uint8_t range = ceil( copy.length() / 13.0 );
+			uint8_t charLeft = copy.length();
+			bool nullStored = false;
+
+			for ( uint8_t i = 1; i <= range; i++ ) {
+
+				LongDirectoryEntry entry;
+
+				entry.ordinal = ( i == range ) ? LAST_LONG_ENTRY | i : i;
+				entry.attributes = ATTR_LONG_NAME;
+				entry.type = 0;
+				entry.firstClusterLO = 0;
+
+				cout << i << ": name1: ";
+
+				convertLongNameSegment( entry.name1, 5, charLeft, nullStored, copy );
+
+				cout << dec << endl;
+
+				cout << i << ": name2: ";
+
+				convertLongNameSegment( entry.name2, 6, charLeft, nullStored, copy );
+
+				cout << dec << endl;
+
+				cout << i << ": name3: ";
+
+				convertLongNameSegment( entry.name3, 2, charLeft, nullStored, copy );
+
+				cout << dec << endl;
+
+				longEntries.insert( longEntries.begin(), entry );
+			}
+
+			cout << "created " << longEntries.size() << " longEntries" << endl;
+
+		} else {
+
+			cout << "error: total path length must be less than 260 characters.\n";
+			return;
+		}
+
+	} else {
+
+		cout << "error: file name must be less than 256 characters.\n";
+		return;
+	}
 
 	cout << "error: unimplmented.\n";
+}
+
+void FAT32::convertLongNameSegment( uint16_t * nameInStruct, uint8_t length, uint8_t & charLeft, bool & nullStored,
+									 const string & name ) {
+
+	for ( uint8_t i = 0; i < length; i++ ) {
+
+		if ( charLeft != 0 )
+			nameInStruct[i] = name[ name.length() - charLeft-- ];
+
+		else if ( !nullStored ) {
+
+			nullStored = true;
+			nameInStruct[i] = LONG_NAME_NULL;
+		}
+
+		else
+			nameInStruct[i] = LONG_NAME_TRAIL;
+
+		cout << hex << setw(4) << setfill('0') << +nameInStruct[i] << " ";
+	}
+
+}
+
+const string FAT32::generateBasisName( const string & longName, bool & lossyConversion ) const {
+
+	string shortCopy;
+	lossyConversion = false;
+
+	for ( uint8_t i = 0; i < longName.length(); i++ ) {
+
+		if ( longName[i] == '+' || longName[i] == ',' || longName[i] == ';' || longName[i] == '=' 
+			|| longName[i] == '['  || longName[i] == ']' ) {
+
+			lossyConversion = true;
+			shortCopy += '_';
+		}
+
+		else if ( longName[i] == ' ' )
+			continue;
+
+		else if ( longName[i] == '.' && longName.find_last_of( "." ) != i )
+			continue;
+
+		else 
+			shortCopy += toupper( longName[i] );
+	}
+
+    string basisName( 11, SHORT_NAME_SPACE_PAD );
+
+    for ( uint8_t i = 0; i < 8 && i < shortCopy.length() && shortCopy[i] != '.'; i++ )
+    	basisName[i] = shortCopy[i];
+
+    size_t period = shortCopy.find_last_of( "." );
+    if ( period != string::npos )
+    	for( uint8_t i = 0; i < 3 && ( ( period + 1 ) + i ) < shortCopy.length(); i++ )
+			basisName[ 8 + i ] = shortCopy[ ( period + 1 ) + i ];
+
+	return basisName;
+}
+
+inline bool FAT32::shortEntryNameExists( string & name ) {
+
+	for ( uint32_t i = 0; i < currentDirectoryListing.size(); i++ )
+		if ( strncmp( reinterpret_cast<char *>( currentDirectoryListing[i].shortEntry.name ), name.c_str(), 11 ) == 0 )
+			return true;
+	
+	return false;
 }
 
 /**
@@ -184,8 +390,7 @@ void FAT32::read( const string & fileName, uint32_t startPos, uint32_t numBytes 
 		if ( this->openFiles.find( file ) != this->openFiles.end() ) {
 
 			// Check permissions
-			if ( this->openFiles[file] == READ
-				|| this->openFiles[file] == READWRITE ) {
+			if ( this->openFiles[file] == READ || this->openFiles[file] == READWRITE ) {
 
 				// Read file contents
 				vector<uint32_t> clusterChain;

@@ -82,7 +82,11 @@ int main( int argc, char * argv[] ) {
 
 			} else if ( tokens[0].compare( "create" ) == 0 ) {
 
-				fat.create();
+				if ( tokens.size() == 2 )
+					fat.create( tokens[1] );
+
+				else
+					cout << "error: usage: create <file name>\n";
 				
 			} else if ( tokens[0].compare( "read" ) == 0 ) {
 
