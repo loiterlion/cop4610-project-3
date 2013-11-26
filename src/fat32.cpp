@@ -245,11 +245,10 @@ void FAT32::create( const string & fileName ) {
 						| ( ( tmNow->tm_min & 0x0000002F ) << 5 )
 						| ( ( tmNow->tm_hour & 0x0000001F ) << 11 );
 
-			
-
 			shortEntry.writeDate = shortEntry.lastAccessDate = shortEntry.createdDate = date;
 			shortEntry.writeTime = shortEntry.createdTime = time;
 
+			// TODO: get actual ms resolution
 			//shortEntry.createdTimeTenth = 
 
 			// Calculate number of Long Directory Entries needed
