@@ -12,6 +12,7 @@
 #include <map>
 #include <stdint.h>
 #include <string>
+#include <sys/time.h>
 #include <vector>
 
 #include <iomanip>
@@ -32,7 +33,8 @@ const uint8_t ATTR_READ_ONLY = 0x01,
 			  LAST_LONG_ENTRY = 0x40,
 			  SHORT_NAME_SPACE_PAD = 0x20,
 			  DIR_FREE_ENTRY = 0xE5,
-			  DIR_LAST_FREE_ENTRY = 0x00;
+			  DIR_LAST_FREE_ENTRY = 0x00,
+			  LONG_NAME_LENGTH = 0x0D;
 
 const uint16_t LONG_NAME_TRAIL = 0xFFFF,
 			   LONG_NAME_NULL = 0x0000;
@@ -43,7 +45,8 @@ const uint32_t FAT_ENTRY_SIZE = 0x04,
 			   EOC = 0x0FFFFFF8,
 			   DIR_ENTRY_SIZE = 0x20,
 			   DIR_Attr = 0x0B,
-			   DIR_Name_Length = 0x0B;  	
+			   DIR_Name_LENGTH = 0x0B,
+			   DIR_MAX_SIZE = 0x200000;  	
 
 // Open Mode Constants
 const uint8_t READ = 0x01,
@@ -151,7 +154,7 @@ private:
 
 	BIOSParameterBlock bpb;
 	FSInfo fsInfo;
-	uint32_t firstDataSector, fatLocation, countOfClusters, * fat;
+	uint32_t firstDataSector, fatLocation, countOfClusters, * fat, currentDirectoryFirstCluster;
 	fstream & fatImage;
 	vector<string> currentPath;
 	vector<uint32_t> freeClusters;
@@ -160,15 +163,18 @@ private:
 	
 	void appendLongName( string & current, uint16_t * name, uint32_t size ) const;
 	inline uint32_t calculateDirectoryEntryLocation( uint32_t byte, vector<uint32_t> clusterChain ) const;
+	inline uint8_t calculateChecksum( const uint8_t * shortName ) const;
 	void convertLongNameSegment( uint16_t * nameInStruct, uint8_t length, uint8_t & charLeft, bool & nullStored, const string & name );
 	const string convertShortName( uint8_t * name ) const;
 	inline void deleteLongDirectoryEntry( LongDirectoryEntry entry );
 	inline void deleteShortDirectoryEntry( ShortDirectoryEntry entry );
+	bool fileExists( const string & fileName ) const;
 	bool findDirectory( const string & directoryName, uint32_t & index ) const;
 	bool findEntry( const string & entryName, uint32_t & index ) const;
 	bool findFile( const string & fileName, uint32_t & index ) const;
 	inline uint32_t formCluster( const ShortDirectoryEntry & entry ) const;
 	const string generateBasisName( const string & longName, bool & lossyConversion ) const;
+	string generateNumericTail( string basisName ) const;
 	vector<DirectoryEntry> getDirectoryListing( uint32_t cluster ) const;
 	inline uint32_t getFATEntry( uint32_t n ) const;
 	uint8_t * getFileContents( uint32_t initialCluster, vector<uint32_t> & clusterChain ) const;
@@ -179,8 +185,10 @@ private:
 	inline bool isValidEntryName( const string & entryName ) const;
 	inline uint8_t isValidOpenMode( const string & openMode ) const;
 	inline const string modeToString( const uint8_t & mode ) const;
+	uint8_t * resize( uint32_t amount, vector<uint32_t> & clusterChain );
 	inline void setClusterValue( uint32_t n, uint32_t newValue );
-	inline bool shortEntryNameExists( string & name );
+	inline bool shortNameExists( string name ) const;
+	void writeFileContents( const uint8_t * contents, const vector<uint32_t> & clusterChain );
 	void zeroOutFileContents( uint32_t initialCluster ) const;
 
 public:

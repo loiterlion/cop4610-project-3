@@ -41,7 +41,8 @@ FAT32::FAT32( fstream & fatImage ) : fatImage( fatImage ) {
 			this->freeClusters.push_back( i );
 
 	// Position ourselves in root directory
-	this->currentDirectoryListing = getDirectoryListing( this->bpb.rootCluster );
+	this->currentDirectoryFirstCluster = this->bpb.rootCluster;
+	this->currentDirectoryListing = getDirectoryListing( this->currentDirectoryFirstCluster );
 }
 
 /**
@@ -156,219 +157,214 @@ void FAT32::close( const string & fileName ) {
 
 /**
  * Create File
- * Description: TODO: Needs Description
+ * Description: Attempts to create a file in the current directory.
+ *				Always makes a long name for simplicity purposes.
+ *				Uses basis-name and numeric-tail generation for the file's
+ *				Short Name Entry.
  */
 void FAT32::create( const string & fileName ) {
 
 	string copy = fileName;
 	vector<LongDirectoryEntry> longEntries;
 
-	// Ignore trailing periods
-	size_t trailing = copy.find_last_not_of( "." );
-	if ( trailing != string::npos)
-    	copy.erase( trailing + 1 );
+	if ( !fileExists( fileName ) ) {
 
-	if ( copy.length() <= 255 ) {
+		// Ignore trailing periods
+		size_t trailing = copy.find_last_not_of( "." );
+		if ( trailing != string::npos)
+			copy.erase( trailing + 1 );
 
-		if ( ( getCurrentPath().length() + copy.length() ) <= 260 ) {
+		// File name can be at max 255 characters
+		if ( copy.length() <= 255 ) {
 
-			// Validate fileName
-			for ( unsigned int i = 0; i < copy.length(); i++ )
-				if ( copy[i] < ' ' || copy[i] == '"' || copy[i] == '*' || copy[i] == '/' 
-					|| copy[i] == ':' || copy[i] == '<'  || copy[i] == '>' || copy[i] == '?' 
-					||  copy[i] == '\\'|| copy[i] == '|' ) {
+			// Total path length can be at max 260 characters
+			if ( ( getCurrentPath().length() + copy.length() ) <= 260 ) {
 
-					cout << "error: illegal character (" << copy[i] << ") in file name.\n";
-					return;
+				// Validate fileName against invaid bytes
+				for ( unsigned int i = 0; i < copy.length(); i++ )
+					if ( copy[i] < ' ' || copy[i] == '"' || copy[i] == '*' || copy[i] == '/' 
+						|| copy[i] == ':' || copy[i] == '<'  || copy[i] == '>' || copy[i] == '?' 
+						||  copy[i] == '\\'|| copy[i] == '|' ) {
+
+						cout << "error: illegal character (" << copy[i] << ") in file name.\n";
+						return;
+					}
+
+				// Get our basis name
+				bool lossyConversion = false;
+				string basisName = generateBasisName( copy, lossyConversion );
+
+				// See if our name fits within 8.3 naming conventions
+				// Assuming fit literally means length without periods
+				bool fits = false;
+				uint8_t periodCount = 0;
+				for ( uint8_t i = 0; i < copy.length(); i++ )
+					if ( copy[i] == '.' )
+						periodCount++;
+
+				if (  ( copy.length() <= DIR_Name_LENGTH && copy.find( "." ) == string::npos ) 
+					|| ( copy.length() <= DIR_Name_LENGTH + 1 && periodCount == 1 ) )
+					fits = true;
+
+				// Check if we even need to do the numeric-tail algorithm
+				if ( lossyConversion || !fits || shortNameExists( basisName ) )
+					basisName = generateNumericTail( basisName );
+
+				// Setup Short Directory Entry
+				ShortDirectoryEntry shortEntry;
+
+				// Copy in basis name
+				for ( uint8_t i = 0; i < DIR_Name_LENGTH; i++ )
+					shortEntry.name[i] = basisName[i];
+
+				uint8_t checksum = calculateChecksum( shortEntry.name );
+
+				shortEntry.attributes = ATTR_ARCHIVE;
+				shortEntry.NTReserved = 0x00;
+				shortEntry.firstClusterHI = 0x0000;
+				shortEntry.firstClusterLO = 0x0000;
+				shortEntry.fileSize = 0x00000000;
+
+				// MS-DOS epoch is 01/01/1980
+				timeval timeOfDay;
+				gettimeofday( &timeOfDay, NULL );
+				time_t timeNow = (time_t) timeOfDay.tv_sec;
+				struct tm * tmNow = localtime( &timeNow );
+
+				shortEntry.createdTimeTenth = ( ( timeOfDay.tv_usec / 1000 ) % 1000 ) / 5;
+
+				// 0-4: Day of Month, 5-8: Month of Year, 9-15: Years since 1980
+				uint16_t date = ( tmNow->tm_mday & 0x0000001F )
+							| ( ( ( tmNow->tm_mon + 1 ) & 0x0000000F ) << 5 )
+							| ( ( ( tmNow->tm_year - 80 ) & 0x000000EF ) << 9 );
+
+				// 0-4: Seconds, 5-10: Minutes, 11-15: Hours
+				uint16_t time = ( ( tmNow->tm_sec / 2 ) & 0x0000001F )
+							| ( ( tmNow->tm_min & 0x0000002F ) << 5 )
+							| ( ( tmNow->tm_hour & 0x0000001F ) << 11 );
+
+				shortEntry.writeDate = shortEntry.lastAccessDate = shortEntry.createdDate = date;
+				shortEntry.writeTime = shortEntry.createdTime = time;
+
+				// Calculate number of Long Directory Entries needed
+				uint8_t range = ceil( copy.length() / static_cast<double>( LONG_NAME_LENGTH ) );
+				uint8_t charLeft = copy.length();
+				bool nullStored = false;
+
+				// Form long entry chain
+				for ( uint8_t i = 1; i <= range; i++ ) {
+
+					LongDirectoryEntry entry;
+
+					entry.ordinal = ( i == range ) ? LAST_LONG_ENTRY | i : i;
+					entry.attributes = ATTR_LONG_NAME;
+					entry.type = 0;
+					entry.checksum = checksum;
+					entry.firstClusterLO = 0;
+
+					convertLongNameSegment( entry.name1, sizeof( entry.name1 ) / 2, charLeft, nullStored, copy );
+					convertLongNameSegment( entry.name2, sizeof( entry.name2 ) / 2, charLeft, nullStored, copy );
+					convertLongNameSegment( entry.name3, sizeof( entry.name3 ) / 2, charLeft, nullStored, copy );
+
+					longEntries.insert( longEntries.begin(), entry );
 				}
 
-			cout << "long name is: " << copy << endl;
+				// Read file contents
+				vector<uint32_t> clusterChain;
+				uint8_t * contents = getFileContents( this->currentDirectoryFirstCluster, clusterChain );
 
-			bool lossyConversion = false;
-			string basisName = generateBasisName( copy, lossyConversion );
+				// Look for enough free entries
+				uint32_t size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
+				uint32_t start = 0, end = 0;
+				uint32_t entriesNeeded = longEntries.size() + 1;
 
-			bool fits = false;
-			uint8_t periodCount = 0;
-			for ( uint8_t i = 0; i < copy.length(); i++ )
-				if ( copy[i] == '.' )
-					periodCount++;
+				// Parse contents
+				uint32_t count = 0;
+				for ( uint32_t i = 0; i < size; i += DIR_ENTRY_SIZE ) {
 
-			if (  ( copy.length() <= 11 && copy.find( "." ) == string::npos ) 
-				|| ( copy.length() <= 12 && periodCount == 1 ) )
-				fits = true;
+					uint8_t ordinal = contents[i];
 
-			// Check if we even need to do the algorithm
-			if ( lossyConversion || !fits || shortEntryNameExists( basisName ) ) {
+					// Check if not free entry
+					if ( ordinal == DIR_FREE_ENTRY || ordinal == DIR_LAST_FREE_ENTRY ) {
 
-				char nBuffer[7] = {0};
-				string primaryName = basisName.substr( 0, 8 );
-				primaryName = primaryName.substr( 0, primaryName.find( " " ) );
+						count++;
 
-				for ( uint32_t start = 1; start <= 999999; start++ ) {
+						if ( i > start && count == 1 )
+							start = i;
 
-					sprintf( nBuffer, "%d", start );
-					primaryName = primaryName.substr( 0, min( primaryName.length(), 8 - ( strlen( nBuffer ) + 1 ) ) ) + "~" + nBuffer;
+						else if ( count == entriesNeeded ) {
 
-					if ( !shortEntryNameExists( primaryName ) )
-						break;
+							end = i;
+							break;
+						}
+
+					// Contiguous block broken
+					} else if ( count > 0 )
+						// Reset
+						count = start = end = 0;
 				}
 
-				basisName = primaryName + basisName.substr( 8, string::npos );
+				uint32_t currentPosition = start;
 
+				if ( start == 0 || end == 0 ) {
+
+					uint32_t clustersNeeded;
+					clustersNeeded = ceil( static_cast<double>( entriesNeeded ) / ( ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector ) / DIR_ENTRY_SIZE ) );
+					currentPosition = size;
+
+					if ( this->freeClusters.size() < clustersNeeded 
+						|| ( size + ( clustersNeeded * this->bpb.sectorsPerCluster * this->bpb.bytesPerSector ) ) > DIR_MAX_SIZE ) {
+
+						cout << "Not enough space to create file.\n";
+						return;
+					}
+
+					else {
+
+						delete[] contents;
+						contents = resize( clustersNeeded, clusterChain );
+
+						// Mark last contiguous free spot to newly allocated as free
+						if ( start != 0 )
+							for ( uint32_t i = start; i < size; i += DIR_ENTRY_SIZE )
+								contents[i] = DIR_FREE_ENTRY;
+
+						size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
+					}
+				}
+
+				// Write new entries to contents
+
+				// Write long entries
+				for ( uint8_t i = 0; i < longEntries.size(); i++ ) {
+
+					memcpy( contents + currentPosition, &longEntries[i], sizeof( longEntries[i] ) - sizeof( uint32_t ) );
+					currentPosition += DIR_ENTRY_SIZE;
+				}
+
+				// Write Short Entry
+				memcpy( contents + currentPosition, &shortEntry, sizeof( shortEntry ) - sizeof( uint32_t ) );
+
+				// Flush to disk
+				writeFileContents( contents, clusterChain );
+				this->fatImage.flush();
+
+				delete[] contents;
+
+				this->currentDirectoryListing = getDirectoryListing( this->currentDirectoryFirstCluster );
+
+			} else {
+
+				cout << "error: total path length must be less than 260 characters.\n";
+				return;
 			}
-
-			cout << "basis-name again: \"" << basisName << "\"" << endl;
-
-			ShortDirectoryEntry shortEntry;
-
-			// Copy in basis name
-			for ( uint8_t i = 0; i < 11; i++ )
-				shortEntry.name[i] = basisName[i];
-
-			shortEntry.attributes = ATTR_ARCHIVE;
-			shortEntry.NTReserved = 0x00;
-			shortEntry.firstClusterHI = 0x0000;
-			shortEntry.firstClusterLO = 0x0000;
-			shortEntry.fileSize = 0x00000000;
-
-			// MS-DOS epoch is 01/01/1980
-			time_t timeNow = time( NULL );
-			struct tm * tmNow = localtime( &timeNow );
-
-			// 0-4: Day of Month, 5-8: Month of Year, 9-15: Years since 1980
-			uint16_t date = ( tmNow->tm_mday & 0x0000001F )
-						| ( ( ( tmNow->tm_mon + 1 ) & 0x0000000F ) << 5 )
-						| ( ( ( tmNow->tm_year - 80 ) & 0x000000EF ) << 9 );
-
-			// 0-4: Seconds, 5-10: Minutes, 11-15: Hours
-			uint16_t time = ( ( tmNow->tm_sec / 2 ) & 0x0000001F )
-						| ( ( tmNow->tm_min & 0x0000002F ) << 5 )
-						| ( ( tmNow->tm_hour & 0x0000001F ) << 11 );
-
-			shortEntry.writeDate = shortEntry.lastAccessDate = shortEntry.createdDate = date;
-			shortEntry.writeTime = shortEntry.createdTime = time;
-
-			// TODO: get actual ms resolution
-			//shortEntry.createdTimeTenth = 
-
-			// Calculate number of Long Directory Entries needed
-			uint8_t range = ceil( copy.length() / 13.0 );
-			uint8_t charLeft = copy.length();
-			bool nullStored = false;
-
-			for ( uint8_t i = 1; i <= range; i++ ) {
-
-				LongDirectoryEntry entry;
-
-				entry.ordinal = ( i == range ) ? LAST_LONG_ENTRY | i : i;
-				entry.attributes = ATTR_LONG_NAME;
-				entry.type = 0;
-				entry.firstClusterLO = 0;
-
-				cout << i << ": name1: ";
-
-				convertLongNameSegment( entry.name1, 5, charLeft, nullStored, copy );
-
-				cout << dec << endl;
-
-				cout << i << ": name2: ";
-
-				convertLongNameSegment( entry.name2, 6, charLeft, nullStored, copy );
-
-				cout << dec << endl;
-
-				cout << i << ": name3: ";
-
-				convertLongNameSegment( entry.name3, 2, charLeft, nullStored, copy );
-
-				cout << dec << endl;
-
-				longEntries.insert( longEntries.begin(), entry );
-			}
-
-			cout << "created " << longEntries.size() << " longEntries" << endl;
 
 		} else {
 
-			cout << "error: total path length must be less than 260 characters.\n";
+			cout << "error: file name must be less than 256 characters.\n";
 			return;
 		}
-
-	} else {
-
-		cout << "error: file name must be less than 256 characters.\n";
-		return;
 	}
-
-	cout << "error: unimplmented.\n";
-}
-
-void FAT32::convertLongNameSegment( uint16_t * nameInStruct, uint8_t length, uint8_t & charLeft, bool & nullStored,
-									 const string & name ) {
-
-	for ( uint8_t i = 0; i < length; i++ ) {
-
-		if ( charLeft != 0 )
-			nameInStruct[i] = name[ name.length() - charLeft-- ];
-
-		else if ( !nullStored ) {
-
-			nullStored = true;
-			nameInStruct[i] = LONG_NAME_NULL;
-		}
-
-		else
-			nameInStruct[i] = LONG_NAME_TRAIL;
-
-		cout << hex << setw(4) << setfill('0') << +nameInStruct[i] << " ";
-	}
-
-}
-
-const string FAT32::generateBasisName( const string & longName, bool & lossyConversion ) const {
-
-	string shortCopy;
-	lossyConversion = false;
-
-	for ( uint8_t i = 0; i < longName.length(); i++ ) {
-
-		if ( longName[i] == '+' || longName[i] == ',' || longName[i] == ';' || longName[i] == '=' 
-			|| longName[i] == '['  || longName[i] == ']' ) {
-
-			lossyConversion = true;
-			shortCopy += '_';
-		}
-
-		else if ( longName[i] == ' ' )
-			continue;
-
-		else if ( longName[i] == '.' && longName.find_last_of( "." ) != i )
-			continue;
-
-		else 
-			shortCopy += toupper( longName[i] );
-	}
-
-    string basisName( 11, SHORT_NAME_SPACE_PAD );
-
-    for ( uint8_t i = 0; i < 8 && i < shortCopy.length() && shortCopy[i] != '.'; i++ )
-    	basisName[i] = shortCopy[i];
-
-    size_t period = shortCopy.find_last_of( "." );
-    if ( period != string::npos )
-    	for( uint8_t i = 0; i < 3 && ( ( period + 1 ) + i ) < shortCopy.length(); i++ )
-			basisName[ 8 + i ] = shortCopy[ ( period + 1 ) + i ];
-
-	return basisName;
-}
-
-inline bool FAT32::shortEntryNameExists( string & name ) {
-
-	for ( uint32_t i = 0; i < currentDirectoryListing.size(); i++ )
-		if ( strncmp( reinterpret_cast<char *>( currentDirectoryListing[i].shortEntry.name ), name.c_str(), 11 ) == 0 )
-			return true;
-	
-	return false;
 }
 
 /**
@@ -518,6 +514,7 @@ void FAT32::cd( const string & directoryName ) {
 		if ( directoryName.compare( ".." ) == 0 && formCluster( currentDirectoryListing[index].shortEntry ) == 0 ) {
 
 			this->currentPath.clear();
+			this->currentDirectoryFirstCluster = this->bpb.rootCluster;
 			this->currentDirectoryListing = getDirectoryListing( this->bpb.rootCluster );
 
 		} else {
@@ -530,7 +527,8 @@ void FAT32::cd( const string & directoryName ) {
 			else if ( directoryName.compare( "." ) != 0 )
 				this->currentPath.push_back( directoryName );
 
-			this->currentDirectoryListing = getDirectoryListing( formCluster( currentDirectoryListing[index].shortEntry ) );
+			this->currentDirectoryFirstCluster = formCluster( currentDirectoryListing[index].shortEntry );
+			this->currentDirectoryListing = getDirectoryListing( this->currentDirectoryFirstCluster );
 		}		
 	}
 }
@@ -626,6 +624,22 @@ void FAT32::appendLongName( string & current, uint16_t * name, uint32_t size ) c
 }
 
 /**
+ * Calculate Checksum
+ * Description: Uses the checksum algorithm from the specification
+ *				to calculate a checksum on a shortname to be placed
+ *				in Long Directory entries.
+ */
+inline uint8_t FAT32::calculateChecksum( const uint8_t * shortName ) const {
+
+	uint8_t sum = 0;
+
+	for ( uint8_t i = 0; i < DIR_Name_LENGTH; i++ )
+		sum = ( ( sum & 1 ) ? 0x80 : 0 ) + ( sum >> 1 ) + shortName[i];
+
+	return sum;
+}
+
+/**
  * Calculate Directory Entry Location
  * Description: Calculates exact byte location of a given directory entries relative byte
  *				to the directory with the cluster chain associated with it
@@ -635,6 +649,31 @@ inline uint32_t FAT32::calculateDirectoryEntryLocation( uint32_t byte, vector<ui
 	return ( this->getFirstDataSectorOfCluster( 
 				clusterChain[ byte / ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector ) ] ) * this->bpb.bytesPerSector 
 		   ) + ( byte % ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector ) );
+}
+
+/**
+ * Convert Long Name Segment
+ * Description: Takes a piece of a given long name and sticks it 
+ *				into one of a Long Directory's name fields.
+ */
+void FAT32::convertLongNameSegment( uint16_t * nameInStruct, uint8_t length, uint8_t & charLeft, bool & nullStored,
+									 const string & name ) {
+
+	for ( uint8_t i = 0; i < length; i++ ) {
+
+		if ( charLeft != 0 )
+			nameInStruct[i] = name[ name.length() - charLeft-- ];
+
+		else if ( !nullStored ) {
+
+			nullStored = true;
+			nameInStruct[i] = LONG_NAME_NULL;
+		}
+
+		else
+			nameInStruct[i] = LONG_NAME_TRAIL;
+	}
+
 }
 
 /**
@@ -650,7 +689,7 @@ const string FAT32::convertShortName( uint8_t * name ) const {
 
 
 	// Iterate through name
-	for ( uint32_t i = 0; i < DIR_Name_Length; i++ ) {
+	for ( uint32_t i = 0; i < DIR_Name_LENGTH; i++ ) {
 
 		// Check if we have encountered padding
 		if ( name[i] == SHORT_NAME_SPACE_PAD ) {
@@ -696,6 +735,31 @@ inline void FAT32::deleteShortDirectoryEntry( ShortDirectoryEntry entry ) {
 
 	this->fatImage.seekp( entry.location );
 	this->fatImage.write( reinterpret_cast<char *>( &entry ), DIR_ENTRY_SIZE );
+}
+
+/**
+ * File Exists
+ * Description: Check if a file by the given name exists in the
+ *				current directory.
+ */
+bool FAT32::fileExists( const string & fileName ) const {
+
+	// Check if directoryName is valid
+	if ( !isValidEntryName( fileName ) ) {
+
+		cout << "error: file name may not contain /.\n";
+		return true;
+	}
+
+	// Check if directory user want is in current directory
+	for ( uint32_t i = 0; i < currentDirectoryListing.size(); i++ )
+		if ( currentDirectoryListing[i].name.compare( fileName ) == 0 ) {
+
+			cout << "error: file already exists.\n";
+			return true;
+		}
+
+	return false;
 }
 
 /**
@@ -811,6 +875,78 @@ inline uint32_t FAT32::formCluster( const ShortDirectoryEntry & entry ) const {
 }
 
 /**
+ * Generate Basis Name
+ * Description: Generates a basis-name from a long name. Will set if a 
+ *				lossy conversion was applied.
+ */
+const string FAT32::generateBasisName( const string & longName, bool & lossyConversion ) const {
+
+	string shortCopy;
+	lossyConversion = false;
+
+	for ( uint8_t i = 0; i < longName.length(); i++ ) {
+
+		if ( longName[i] == '+' || longName[i] == ',' || longName[i] == ';' || longName[i] == '=' 
+			|| longName[i] == '['  || longName[i] == ']' ) {
+
+			lossyConversion = true;
+			shortCopy += '_';
+		}
+
+		else if ( longName[i] == ' ' )
+			continue;
+
+		else if ( longName[i] == '.' && longName.find_last_of( "." ) != i )
+			continue;
+
+		else 
+			shortCopy += toupper( longName[i] );
+	}
+
+    string basisName( DIR_Name_LENGTH, SHORT_NAME_SPACE_PAD );
+
+    for ( uint8_t i = 0; i < 8 && i < shortCopy.length() && shortCopy[i] != '.'; i++ )
+    	basisName[i] = shortCopy[i];
+
+    size_t period = shortCopy.find_last_of( "." );
+    if ( period != string::npos )
+    	for( uint8_t i = 0; i < 3 && ( ( period + 1 ) + i ) < shortCopy.length(); i++ )
+			basisName[ 8 + i ] = shortCopy[ ( period + 1 ) + i ];
+
+	return basisName;
+}
+
+/**
+ * Generate Numerical Tail
+ * Description: Uses the numeric-tail algorithm to figure out
+ *				what name a basis-name needs.
+ */
+string FAT32::generateNumericTail( string basisName ) const {
+
+	// Need to only ever occupy up to the length of 999999
+	char nBuffer[7] = {0};
+	string primaryName = basisName.substr( 0, 8 );
+	primaryName = primaryName.substr( 0, primaryName.find( " " ) );
+	string extension = basisName.substr( 8, string::npos );
+	string finalPrimaryName;
+
+	for ( uint32_t start = 1; start <= 999999; start++ ) {
+
+		// sprintf allows us to easily make a digit into a string
+		sprintf( nBuffer, "%d", start );
+
+		// Shorten primary name if necessary
+		finalPrimaryName = primaryName.substr( 0, min( primaryName.length(), 8 - ( strlen( nBuffer ) + 1 ) ) ) + "~" + nBuffer;
+
+		// Stop generating tails as soon as one works
+		if ( !shortNameExists( finalPrimaryName + extension ) )
+			break;
+	}
+
+	return finalPrimaryName + extension;
+}
+
+/**
  * Get Directory Listing
  * Description: Returns a list of DirectoryEntries for a given cluster.
  * Expects: cluster to be a valid data cluster.
@@ -822,7 +958,6 @@ vector<DirectoryEntry> FAT32::getDirectoryListing( uint32_t cluster ) const {
 	uint32_t size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
 	deque<LongDirectoryEntry> longEntries;
 	vector<DirectoryEntry> result;
-
 	// Parse contents
 	for ( uint32_t i = 0; i < size; i += DIR_ENTRY_SIZE ) {
 
@@ -1037,6 +1172,85 @@ inline const string FAT32::modeToString( const uint8_t & mode ) const {
 }
 
 /**
+ * Resize File
+ * Description: Resizes a file (cluster chain) by a given amount. Updates
+ *				the fat image as well.
+ */
+uint8_t * FAT32::resize( uint32_t amount, vector<uint32_t> & clusterChain ) {
+
+	for ( uint32_t i = 0; i < amount; i++ ) {
+
+		uint32_t currentCluster = clusterChain.back();
+		uint32_t nextCluster = this->freeClusters.front();
+
+		setClusterValue( currentCluster, nextCluster );
+		setClusterValue( nextCluster, EOC );
+		this->freeClusters.erase( this->freeClusters.begin() );
+		this->fsInfo.freeCount--;
+
+		clusterChain.pop_back();
+		clusterChain.push_back( currentCluster );
+		clusterChain.push_back( nextCluster );
+	}
+
+	// Update all FATs
+	for ( uint8_t i = 0; i < this->bpb.numFATs; i++ ) {
+
+		uint32_t fatLocation = this->bpb.reservedSectorCount * this->bpb.bytesPerSector + ( i * this->bpb.FATSz32 * this->bpb.bytesPerSector );
+		this->fatImage.seekp( fatLocation );
+		this->fatImage.write( reinterpret_cast<char *>( this->fat ), ( this->countOfClusters + 2 ) *  FAT_ENTRY_SIZE );
+	}
+
+	// Update FSInfo
+	this->fatImage.seekp( this->bpb.FSInfo * this->bpb.bytesPerSector );
+	this->fatImage.write( reinterpret_cast<char *>( &this->fsInfo ), sizeof( this->fsInfo ) );
+
+	uint32_t size = clusterChain.size() * ( this->bpb.sectorsPerCluster * this->bpb.bytesPerSector );
+
+	uint8_t * data = NULL;
+
+	// Only allocate a buffer if we were able to make a chain
+	if ( size > 0 ) {
+
+		data = new uint8_t[ size ];
+		uint8_t * temp = data;
+
+		// Read in data
+		for ( uint32_t i = 0; i < clusterChain.size(); i++ ) {
+
+			this->fatImage.seekg( this->getFirstDataSectorOfCluster( clusterChain[i] ) * this->bpb.bytesPerSector  );
+
+			for ( uint32_t j = 0; j < this->bpb.sectorsPerCluster ; j++ ) {
+
+				this->fatImage.read( reinterpret_cast<char *>( temp ), this->bpb.bytesPerSector  );
+				temp += this->bpb.bytesPerSector ;
+			}
+		}
+	}
+
+	if ( data == NULL ) {
+
+		cout << "Failed to get file contents. Aborting.";
+		exit( EXIT_SUCCESS );
+	}
+
+	return data;
+}
+
+/**
+ * Short Name Exists
+ * Description: Checks if a short name exists in the current directory.
+ */
+inline bool FAT32::shortNameExists( string name ) const {
+
+	for ( uint32_t i = 0; i < currentDirectoryListing.size(); i++ )
+		if ( strncmp( reinterpret_cast<const char *>( currentDirectoryListing[i].shortEntry.name ), name.c_str(), DIR_Name_LENGTH ) == 0 )
+			return true;
+	
+	return false;
+}
+
+/**
  * Set Cluster Value
  * Description: Sets a cluster entry to a given value.
  */
@@ -1050,6 +1264,27 @@ inline void FAT32::setClusterValue( uint32_t n, uint32_t newValue ) {
 
 	// Set new value
 	this->fat[n] |= newValue;
+}
+
+/**
+ * Write File Contentss
+ * Description: Writes the given file contents to a specified
+ *				cluster chain.
+ * Expects: clusterChain to correspond to contents.
+ */
+void FAT32::writeFileContents( const uint8_t * contents, const vector<uint32_t> & clusterChain ) {
+
+	// Read in data
+	for ( uint32_t i = 0; i < clusterChain.size(); i++ ) {
+
+		this->fatImage.seekp( this->getFirstDataSectorOfCluster( clusterChain[i] ) * this->bpb.bytesPerSector  );
+
+		for ( uint32_t j = 0; j < this->bpb.sectorsPerCluster ; j++ ) {
+
+			this->fatImage.write( reinterpret_cast<const char *>( contents ), this->bpb.bytesPerSector  );
+			contents += this->bpb.bytesPerSector ;
+		}
+	}
 }
 
 /**
