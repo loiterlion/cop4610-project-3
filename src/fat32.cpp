@@ -1393,9 +1393,13 @@ void FAT32::removeEntry( DirectoryEntry & entry, uint32_t index, bool safe ) {
 
 	for ( vector<uint32_t>::reverse_iterator itr = clusterChain.rbegin(); itr != clusterChain.rend(); itr++ ) {
 
-		setClusterValue( *itr, FREE_CLUSTER );
-		this->freeClusters.push_back( *itr );
-		this->fsInfo.freeCount++;
+		// Skip free clusters
+		if ( *itr != 0 ) {
+
+			setClusterValue( *itr, FREE_CLUSTER );
+			this->freeClusters.push_back( *itr );
+			this->fsInfo.freeCount = this->freeClusters.size();
+		}
 	}
 
 	// Update all FATs
@@ -1453,7 +1457,7 @@ uint8_t * FAT32::resize( uint32_t amount, vector<uint32_t> & clusterChain ) {
 		uint32_t nextCluster = this->freeClusters.front();
 		setClusterValue( nextCluster, EOC );
 		this->freeClusters.erase( this->freeClusters.begin() );
-		this->fsInfo.freeCount--;
+		this->fsInfo.freeCount = this->freeClusters.size();
 
 		// Update chain
 		clusterChain.pop_back();
@@ -1472,7 +1476,7 @@ uint8_t * FAT32::resize( uint32_t amount, vector<uint32_t> & clusterChain ) {
 		setClusterValue( currentCluster, nextCluster );
 		setClusterValue( nextCluster, EOC );
 		this->freeClusters.erase( this->freeClusters.begin() );
-		this->fsInfo.freeCount--;
+		this->fsInfo.freeCount = this->freeClusters.size();
 
 		// Update chain
 		clusterChain.pop_back();
