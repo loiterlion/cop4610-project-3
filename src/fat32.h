@@ -46,7 +46,8 @@ const uint32_t FAT_ENTRY_SIZE = 0x04,
 			   DIR_ENTRY_SIZE = 0x20,
 			   DIR_Attr = 0x0B,
 			   DIR_Name_LENGTH = 0x0B,
-			   DIR_MAX_SIZE = 0x200000;  	
+			   DIR_MAX_SIZE = 0x200000,
+			   FILE_MAX_SIZE = 0xFFFFFFFF;  	
 
 // Open Mode Constants
 const uint8_t READ = 0x01,
@@ -154,20 +155,26 @@ private:
 
 	BIOSParameterBlock bpb;
 	FSInfo fsInfo;
-	uint32_t firstDataSector, fatLocation, countOfClusters, * fat, currentDirectoryFirstCluster;
+	uint32_t bytesPerCluster,
+			 firstDataSector,
+			 fatLocation,
+			 countOfClusters,
+			 * fat,
+			 currentDirectoryFirstCluster;
+
 	fstream & fatImage;
 	vector<string> currentPath;
 	vector<uint32_t> freeClusters;
 	vector<DirectoryEntry> currentDirectoryListing;
 	map<DirectoryEntry, uint8_t> openFiles;
 	
+	void addFile( DirectoryEntry & entry );
 	void appendLongName( string & current, uint16_t * name, uint32_t size ) const;
 	inline uint32_t calculateDirectoryEntryLocation( uint32_t byte, vector<uint32_t> clusterChain ) const;
 	inline uint8_t calculateChecksum( const uint8_t * shortName ) const;
-	void convertLongNameSegment( uint16_t * nameInStruct, uint8_t length, uint8_t & charLeft, bool & nullStored, const string & name );
+	void convertLongNameSegment( uint16_t * nameInStruct, uint8_t length, uint8_t & charLeft, bool & nullStored, const string & name ) const;
 	const string convertShortName( uint8_t * name ) const;
-	inline void deleteLongDirectoryEntry( LongDirectoryEntry entry );
-	inline void deleteShortDirectoryEntry( ShortDirectoryEntry entry );
+	bool directoryExists( const string & directoryName ) const;
 	bool fileExists( const string & fileName ) const;
 	bool findDirectory( const string & directoryName, uint32_t & index ) const;
 	bool findEntry( const string & entryName, uint32_t & index ) const;
@@ -184,7 +191,9 @@ private:
 	inline bool isFreeCluster( uint32_t value ) const;
 	inline bool isValidEntryName( const string & entryName ) const;
 	inline uint8_t isValidOpenMode( const string & openMode ) const;
+	bool makeFile( const string & fileName, DirectoryEntry & entry, bool directory ) const;
 	inline const string modeToString( const uint8_t & mode ) const;
+	void removeEntry( DirectoryEntry & entry, uint32_t index, bool safe );
 	uint8_t * resize( uint32_t amount, vector<uint32_t> & clusterChain );
 	inline void setClusterValue( uint32_t n, uint32_t newValue );
 	inline bool shortNameExists( string name ) const;
@@ -207,12 +216,12 @@ public:
 	void close( const string & fileName );
 	void create( const string & fileName );
 	void read( const string & fileName, uint32_t startPos, uint32_t numBytes );
-	void write();
+	void write( const string & fileName, uint32_t startPos, const string & quotedData );
 	void rm( const string & fileName, bool safe = false );
 	void cd( const string & directory );
 	void ls( const string & directory ) const;
-	void mkdir();
-	void rmdir();
+	void mkdir( const string & directoryName );
+	void rmdir( const string & directoryName );
 	void size( const string & fileName ) const;
 
 };

@@ -92,11 +92,36 @@ int main( int argc, char * argv[] ) {
 
 				if ( tokens.size() == 4 ) {
 
-					uint32_t startPos, numBytes;
+					// Check if numbers are actually numbers
+					bool validNumber = true;
+					string startPosStr = tokens[2], numBytesStr = tokens[3];
+					for ( uint32_t i = 0; i < startPosStr.length(); i++ )
+						if ( !isdigit( startPosStr[i] ) ) {
 
-					// Try to convert arguments
-					if ( stringTouint32( tokens[2], "start pos", startPos ) && stringTouint32( tokens[3], "num bytes", numBytes ) )
-						fat.read( tokens[1], startPos, numBytes );
+							validNumber = false;
+							break;
+						}
+
+					// Possibly check numBytesStr as well
+					if ( validNumber )
+						for ( uint32_t i = 0; i < numBytesStr.length(); i++ )
+							if ( !isdigit( numBytesStr[i] ) ) {
+
+								validNumber = false;
+								break;
+							}
+
+					if ( validNumber ) {
+
+						uint32_t startPos, numBytes;
+
+						// Try to convert arguments
+						if ( stringTouint32( startPosStr, "start pos", startPos ) && stringTouint32( numBytesStr, "num bytes", numBytes ) )
+							fat.read( tokens[1], startPos, numBytes );
+
+					} else
+						cout << "error: usage: read <file name> <start pos> <num bytes>\n";
+					
 				}
 
 				else
@@ -104,7 +129,44 @@ int main( int argc, char * argv[] ) {
 
 			} else if ( tokens[0].compare( "write" ) == 0 ) {
 
-				fat.write();
+				string quotedData;
+
+				if ( tokens.size() >= 4 ) {
+
+					// Per the specification we assume quoted_data will always
+					// be surrounded by quotes so we don't need to do any
+					// validation
+					for ( uint32_t i = 3; i < tokens.size(); i++ )
+						quotedData += tokens[i] += " ";
+
+					// Remove quotes
+					quotedData = quotedData.substr( 1, quotedData.length() - 3 );
+
+					// Check if numbers are actually numbers
+					bool validNumber = true;
+					string startPosStr = tokens[2];
+					for ( uint32_t i = 0; i < startPosStr.length(); i++ )
+						if ( !isdigit( startPosStr[i] ) ) {
+
+							validNumber = false;
+							break;
+						}
+
+					if ( validNumber ) {
+
+						uint32_t startPos;
+
+						// Try to convert arguments
+						if ( stringTouint32( startPosStr, "start pos", startPos ) )
+							fat.write( tokens[1], startPos, quotedData );
+					
+					} else
+						cout << "error: usage: write <file name> <start pos> <quoted data>\n";
+					
+				}
+
+				else
+					cout << "error: usage: write <file name> <start pos> <quoted data>\n";
 
 			} else if ( tokens[0].compare( "rm" ) == 0 ) {
 
@@ -137,11 +199,19 @@ int main( int argc, char * argv[] ) {
 
 			} else if ( tokens[0].compare( "mkdir" ) == 0 ) {
 
-				fat.mkdir();
+				if ( tokens.size() == 2 )
+					fat.mkdir( tokens[1] );
+
+				else
+					cout << "error: usage: mkdir <dir name>\n";
 				
 			} else if ( tokens[0].compare( "rmdir" ) == 0 ) {
 
-				fat.rmdir();
+				if ( tokens.size() == 2 )
+					fat.rmdir( tokens[1] );
+
+				else
+					cout << "error: usage: rmdir <dir name>\n";
 
 			} else if ( tokens[0].compare( "size" ) == 0 ) {
 
