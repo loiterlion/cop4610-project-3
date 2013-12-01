@@ -16,9 +16,9 @@ using namespace std;
  * Forward Declarations
  */
 
-vector<string> tokenize( const string & input );
 void printPrompt( const string & currentPath );
 bool stringTouint32( const string & asString, const string & name, uint32_t & out );
+vector<string> tokenize( const string & input );
 
 int main( int argc, char * argv[] ) {
 
@@ -250,22 +250,16 @@ int main( int argc, char * argv[] ) {
 }
 
 /**
- * Tokenize String
- * Description: Returns a list of tokens from a string split apart
- *				by spaces (multiple ignored).
+ * Primpt Prompt
+ * Description: Prints command prompt in form username[fs-image-name]> .
  */
-vector<string> tokenize( const string & input ) {
+void printPrompt( const string & currentPath ) {
 
-	vector<string> result;
-	stringstream stringStream( input );
-	string temp;
+	char login[LOGIN_NAME_MAX] = { 0 };
 
-	// operator>> of stringstream will ignore extra
-	// spaces just like cin >>
-	while ( stringStream >> temp )
-		result.push_back( temp );
+	getlogin_r( login, LOGIN_NAME_MAX );
 
-	return result;
+	cout << login << "[" << currentPath << "]" << "> "; 
 }
 
 /**
@@ -289,14 +283,20 @@ bool stringTouint32( const string & asString, const string & name, uint32_t & ou
 }
 
 /**
- * Primpt Prompt
- * Description: Prints command prompt in form username[fs-image-name]> .
+ * Tokenize String
+ * Description: Returns a list of tokens from a string split apart
+ *				by spaces (multiple ignored).
  */
-void printPrompt( const string & currentPath ) {
+vector<string> tokenize( const string & input ) {
 
-	char login[LOGIN_NAME_MAX] = { 0 };
+	vector<string> result;
+	stringstream stringStream( input );
+	string temp;
 
-	getlogin_r( login, LOGIN_NAME_MAX );
+	// operator>> of stringstream will ignore extra
+	// spaces just like cin >>
+	while ( stringStream >> temp )
+		result.push_back( temp );
 
-	cout << login << '[' << currentPath << ']' << "> "; 
+	return result;
 }

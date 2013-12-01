@@ -501,6 +501,13 @@ void FAT32::mkdir( const string & directoryName ) {
  */
 void FAT32::rmdir( const string & directoryName ) {
 
+	// Don't let anyone remove . or .. manually
+	if ( directoryName.compare(".") == 0 || directoryName.compare("..") == 0 ) {
+
+		cout << "error: . and .. cannot be removed.\n";
+		return;
+	}
+
 	uint32_t index;
 
 	if ( findDirectory( directoryName, index ) ) {
