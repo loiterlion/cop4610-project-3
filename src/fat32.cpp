@@ -1000,13 +1000,17 @@ string FAT32::generateNumericTail( string basisName ) const {
 
 		// Shorten primary name if necessary
 		finalPrimaryName = primaryName.substr( 0, min( primaryName.length(), 8 - ( strlen( nBuffer ) + 1 ) ) ) + "~" + nBuffer;
+		finalPrimaryName.resize( 8, ' ' );
 
 		// Stop generating tails as soon as one works
 		if ( !shortNameExists( finalPrimaryName + extension ) )
 			break;
 	}
 
-	return finalPrimaryName + extension;
+	string final = finalPrimaryName + extension;
+	final.resize( DIR_Name_LENGTH, ' ' );
+
+	return final;
 }
 
 /**
@@ -1262,20 +1266,8 @@ bool FAT32::makeFile( const string & fileName, DirectoryEntry & entry, bool dire
 			bool lossyConversion = false;
 			string basisName = generateBasisName( copy, lossyConversion );
 
-			// See if our name fits within 8.3 naming conventions
-			// Assuming fit literally means length without periods
-			bool fits = false;
-			uint8_t periodCount = 0;
-			for ( uint8_t i = 0; i < copy.length(); i++ )
-				if ( copy[i] == '.' )
-					periodCount++;
-
-			if (  ( copy.length() <= DIR_Name_LENGTH && copy.find( "." ) == string::npos ) 
-				|| ( copy.length() <= DIR_Name_LENGTH + 1 && periodCount == 1 ) )
-				fits = true;
-
 			// Check if we even need to do the numeric-tail algorithm
-			if ( lossyConversion || !fits || shortNameExists( basisName ) )
+			if ( lossyConversion || copy.length() > DIR_Name_LENGTH || shortNameExists( basisName ) )
 				basisName = generateNumericTail( basisName );
 
 			// Setup Short Directory Entry
