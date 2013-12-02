@@ -129,18 +129,7 @@ int main( int argc, char * argv[] ) {
 
 			} else if ( tokens[0].compare( "write" ) == 0 ) {
 
-				string quotedData;
-
-				if ( tokens.size() >= 4 ) {
-
-					// Per the specification we assume quoted_data will always
-					// be surrounded by quotes so we don't need to do any
-					// validation
-					for ( uint32_t i = 3; i < tokens.size(); i++ )
-						quotedData += tokens[i] += " ";
-
-					// Remove quotes
-					quotedData = quotedData.substr( 1, quotedData.length() - 3 );
+				if ( tokens.size() == 4 ) {
 
 					// Check if numbers are actually numbers
 					bool validNumber = true;
@@ -158,7 +147,7 @@ int main( int argc, char * argv[] ) {
 
 						// Try to convert arguments
 						if ( stringTouint32( startPosStr, "start pos", startPos ) )
-							fat.write( tokens[1], startPos, quotedData );
+							fat.write( tokens[1], startPos, tokens[3] );
 					
 					} else
 						cout << "error: usage: write <file name> <start pos> <quoted data>\n";
@@ -293,10 +282,39 @@ vector<string> tokenize( const string & input ) {
 	stringstream stringStream( input );
 	string temp;
 
+	// Need this for parsing write command correctly
+	bool isWrite = false;
+	uint32_t i = 0;
+
 	// operator>> of stringstream will ignore extra
 	// spaces just like cin >>
-	while ( stringStream >> temp )
-		result.push_back( temp );
+	while ( stringStream ) {
+
+		if ( isWrite && i == 3 ) {
+
+			getline( stringStream, temp );
+
+			// Get any extra data and put it back into the stream
+			string extra = temp.substr( temp.find_last_of( "\"" ) + 1, string::npos );
+			stringStream.str( extra );
+			stringStream.seekg( ios_base::beg );
+
+			// Per the specification we assume quoted_data will always
+			// be surrounded by quotes so we don't need to do any
+			// validation so remove quotes
+			temp = temp.substr( temp.find_first_of( "\"" ) + 1, temp.find_last_of( "\"" ) - 2 );
+
+		} else 
+			stringStream >> temp;
+
+		if ( stringStream )
+			result.push_back( temp );
+
+		if ( i == 0 && temp.compare( "write" ) == 0 )
+			isWrite = true;
+
+		i++;
+	}
 
 	return result;
 }

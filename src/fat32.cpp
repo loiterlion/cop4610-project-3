@@ -273,14 +273,14 @@ void FAT32::write( const string & fileName, uint32_t startPos, const string & qu
 				// Need to update file info in case of crash
 				file.shortEntry.firstClusterHI = ( clusterChain[0] >> 16 );
 				file.shortEntry.firstClusterLO = ( clusterChain[0] & 0x0000FFFF );
-				file.shortEntry.fileSize = requiredSize;
+				file.shortEntry.fileSize += requiredSize;
 				file.shortEntry.attributes |= ATTR_ARCHIVE;
 				this->fatImage.seekp( file.shortEntry.location );
 				this->fatImage.write( reinterpret_cast<char *>( &file.shortEntry ), DIR_ENTRY_SIZE );
 				this->fatImage.flush();
 
 				// Also update our temporary listing
-				currentDirectoryListing[index].shortEntry.fileSize = requiredSize;
+				currentDirectoryListing[index].shortEntry.fileSize += requiredSize;
 				currentDirectoryListing[index].shortEntry.firstClusterHI = ( clusterChain[0] >> 16 );
 				currentDirectoryListing[index].shortEntry.firstClusterLO = ( clusterChain[0] & 0x0000FFFF );
 

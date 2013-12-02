@@ -7,15 +7,46 @@ Date Submitted:
 	12/02/13
 
 Summary:
-	
+	Our code is a FAT32 file system editor. It contains the typical functions:
+	as fsinfo, open, close, create, read, write, rm, cd, ls, mkdir, rmdir, and size.
+	srm (safe remove) is also implemented and can be easily extended to srmdir if
+	so desired in the future. This project was implemented in C++ as it provided
+	a simplistic abstraction from the user end code which has access to the listed
+	functions and the backend code which performs logic that the user shouldn't be able
+	to access. exit was also implemented to allow a cleaner termination of the program.
+	However, Ctrl+C should still result in leaving the fat image clean.
 
 How to Compile:
+	1. cd src
+	2. make
 
 How to Run:
+	1. ./fmod <FAT32 Image>
 
 Settings and parameters are in the make file, and should not be altered or added to.
 
 Files:
+
+Makefile
+	Compiles fmod and cleans if desired.
+
+fmod.cpp
+	The user facing piece of the editor. Tokenizes a users input and
+	attempts to execute a desired command. Usage and numerical limit error checking 
+	takes place here but other types of error checking take place in the FAT32 object.
+
+fat32.h, fat32.cpp
+	Contains the bulk of the project. The FAT32 class is specified and implemented 
+	in these two files. All listed commands are public to the class while all other members
+	and methods are private. Many functions are inlined as they are short in length and not
+	used very much. Const functions and parameters are heavily used in order to notify
+	readers and users of the code what can be done on a FAT32 object without modifying its internal
+	state (logical constness is mostly adhered to). The class makes sure to flush out data modifications
+	ASAP in case of a crash or forced termination.
+
+limitsfix.h
+	Simple utility file used while developing on Mac OS X to support limits not yet
+	defined by Apple.
 
 Bugs:
 	No known bugs.
