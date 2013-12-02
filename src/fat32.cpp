@@ -949,6 +949,7 @@ const string FAT32::generateBasisName( const string & longName, bool & lossyConv
 
 	for ( uint8_t i = 0; i < longName.length(); i++ ) {
 
+		// Check invalid characters and covert to _
 		if ( longName[i] == '+' || longName[i] == ',' || longName[i] == ';' || longName[i] == '=' 
 			|| longName[i] == '['  || longName[i] == ']' ) {
 
@@ -956,21 +957,25 @@ const string FAT32::generateBasisName( const string & longName, bool & lossyConv
 			shortCopy += '_';
 		}
 
+		// Skip over ' ' and possibly '.'
 		else if ( longName[i] == ' ' )
 			continue;
 
 		else if ( longName[i] == '.' && longName.find_last_of( "." ) != i )
 			continue;
 
+		// Otherwise capitalize
 		else 
 			shortCopy += toupper( longName[i] );
 	}
 
     string basisName( DIR_Name_LENGTH, SHORT_NAME_SPACE_PAD );
 
+    // Copy in our results
     for ( uint8_t i = 0; i < 8 && i < shortCopy.length() && shortCopy[i] != '.'; i++ )
     	basisName[i] = shortCopy[i];
 
+    // Try to copy in extension
     size_t period = shortCopy.find_last_of( "." );
     if ( period != string::npos )
     	for( uint8_t i = 0; i < 3 && ( ( period + 1 ) + i ) < shortCopy.length(); i++ )
@@ -1000,7 +1005,7 @@ string FAT32::generateNumericTail( string basisName ) const {
 
 		// Shorten primary name if necessary
 		finalPrimaryName = primaryName.substr( 0, min( primaryName.length(), 8 - ( strlen( nBuffer ) + 1 ) ) ) + "~" + nBuffer;
-		finalPrimaryName.resize( 8, ' ' );
+		finalPrimaryName.resize( 8, SHORT_NAME_SPACE_PAD );
 
 		// Stop generating tails as soon as one works
 		if ( !shortNameExists( finalPrimaryName + extension ) )
@@ -1008,7 +1013,7 @@ string FAT32::generateNumericTail( string basisName ) const {
 	}
 
 	string final = finalPrimaryName + extension;
-	final.resize( DIR_Name_LENGTH, ' ' );
+	final.resize( DIR_Name_LENGTH, SHORT_NAME_SPACE_PAD );
 
 	return final;
 }
