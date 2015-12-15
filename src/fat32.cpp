@@ -577,7 +577,7 @@ void FAT32::addFile( DirectoryEntry & entry ) {
 		uint8_t ordinal = contents[i];
 
 		// Check if not free entry
-		if ( ordinal == DIR_FREE_ENTRY || ordinal == DIR_LAST_FREE_ENTRY ) {
+		if ( ordinal == DIR_FREE_ENTRY ) {
 
 			count++;
 
@@ -591,9 +591,20 @@ void FAT32::addFile( DirectoryEntry & entry ) {
 				blockFound = true;
 				break;
 			}
-
+        }
+        else if (ordinal == DIR_LAST_FREE_ENTRY) {
+            if (start == 0) {
+                start = i;
+            }
+            
+            count = (size - start) / DIR_ENTRY_SIZE;
+            if (count >= entriesNeeded) {
+                blockFound = true;
+                break;
+            }
+        }
 		// Contiguous block broken
-		} else if ( count > 0 ) {
+        else if ( count > 0 ) {
 
 			// Reset
 			count = 0;
